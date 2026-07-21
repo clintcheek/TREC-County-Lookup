@@ -1,4 +1,4 @@
-name: Enrich Texas Broker Counties v3
+name: Enrich Texas Broker Counties v6
 
 "on":
   workflow_dispatch:
@@ -15,7 +15,12 @@ name: Enrich Texas Broker Counties v3
         type: choice
         options:
           - new
+          - recheck_unresolved
           - recheck_review
+          - upgrade_confidence
+          - upgrade_version
+          - recheck_stale
+          - flagged
           - recheck_all
       checkpoint_every:
         description: Save workbook and state after this many completed records
@@ -29,7 +34,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: texas-broker-enrichment-v3
+  group: texas-broker-enrichment-v6
   cancel-in-progress: false
 
 jobs:
@@ -91,7 +96,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: texas-brokers-enriched-v3-${{ github.run_number }}
+          name: texas-brokers-enriched-v6-${{ github.run_number }}
           path: |
             output/**
             state/**
