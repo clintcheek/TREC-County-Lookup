@@ -1,20 +1,37 @@
-# Texas Broker County Resolver v6
+# Texas Broker County Resolver v7
 
-Broker-office-first county enrichment with persistent checkpoint resume, version-aware reprocessing, confidence upgrades, stale-record rechecks, and append-only resolution history.
+V7 keeps the v6 checkpointing, resume, threading, cache, workbook, Census geocoder, audit, and history infrastructure, while replacing the single-address acceptance engine with county evidence voting.
 
-## Recommended first run
+## What changed
 
-Use `upgrade_version` with `max_rows: 25`. This rechecks records produced by older resolver versions without discarding stronger existing results.
+- Evidence is grouped and voted by Texas county.
+- Government and likely official-office sources receive the strongest weight.
+- Independent domains increase confidence; repeated pages from one domain cannot overwhelm the result.
+- Property-listing evidence is down-weighted and cannot independently produce `Verified`.
+- New result tiers: `Verified`, `Very Likely`, `Likely`, `Needs Review`, and `Unresolved`.
+- Existing stronger results are not downgraded during rechecks.
+
+## Recommended first test
+
+Run the GitHub Action manually with:
+
+- mode: `upgrade_version`
+- max_rows: `25`
+- checkpoint_every: `5`
+
+Review `output/brokers_enriched.xlsx`, `state/candidates.csv`, and `state/resolution_history.csv` before increasing the batch size.
+
+## Required secret
+
+Create the GitHub Actions repository secret `SERPER_API_KEY`.
 
 ## Modes
 
-- `new`: records absent from `state/results.csv`
-- `recheck_unresolved`: unresolved and error records
-- `recheck_review`: unresolved and needs-review records
-- `upgrade_confidence`: anything below the configured confidence threshold
-- `upgrade_version`: records produced by an older resolver version
-- `recheck_stale`: records older than `recheck_after_days`
-- `flagged`: rows marked `Needs Recheck = Yes`
-- `recheck_all`: every record
-
-Every attempt is appended to `state/resolution_history.csv`. Existing stronger results are retained when a recheck produces weaker evidence.
+- `new`
+- `recheck_unresolved`
+- `recheck_review`
+- `upgrade_confidence`
+- `upgrade_version`
+- `recheck_stale`
+- `flagged`
+- `recheck_all`

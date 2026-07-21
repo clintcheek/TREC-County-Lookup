@@ -25,8 +25,8 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from rapidfuzz.fuzz import token_set_ratio
 
-RESOLVER_VERSION = "v6"
-USER_AGENT = "TexasBrokerCountyResolver/6.0 (private license-location research)"
+RESOLVER_VERSION = "v7"
+USER_AGENT = "TexasBrokerCountyResolver/7.0 (private license-location research)"
 ADDRESS_RE = re.compile(
     r"\b(\d{1,6}\s+[A-Za-z0-9.'#&\- ]{2,80}?\s(?:Street|St|Road|Rd|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Lane|Ln|Court|Ct|Parkway|Pkwy|Highway|Hwy|Loop|Way|Trail|Trl|Circle|Cir|Plaza|Place|Pl|Terrace|Ter)\.?"
     r"(?:\s*(?:Suite|Ste|Unit|#)\s*[A-Za-z0-9\-]+)?\s*,?\s*[A-Za-z.'\- ]{2,45},?\s*(?:TX|Texas|[A-Z]{2})\s+\d{5}(?:-\d{4})?)\b",
@@ -148,7 +148,7 @@ def finalize_result(result: Result, previous: Result | None = None) -> Result:
 
 
 def status_rank(status: str) -> int:
-    return {"Verified": 4, "Needs Review": 3, "Unresolved": 2, "Error": 1}.get(status, 0)
+    return {"Verified": 6, "Very Likely": 5, "Likely": 4, "Needs Review": 3, "Unresolved": 2, "Error": 1}.get(status, 0)
 
 
 def choose_result(previous: Result | None, current: Result, force_replace: bool = False) -> Result:
@@ -412,20 +412,38 @@ def audit_candidates(path: Path, candidates: list[Candidate]) -> None:
                 w.writerow(asdict(c))
 
 
+def county_vote_weight(candidate: Candidate) -> float:
+    """Convert source quality, identity, context, and listing risk into a county vote."""
+    tier_weight = {0: 0.0, 1: 0.16, 2: 0.42, 3: 0.68, 4: 0.88, 5: 1.0}.get(candidate.source_tier, 0.2)
+    office_bonus = 0.12 if is_office_page(candidate.url, candidate.page_title, candidate.evidence_text) else 0.0
+    listing_factor = 0.32 if is_listing_domain(candidate.url) else 1.0
+    property_factor = max(0.05, 1.0 - candidate.negative_score)
+    return max(0.0, (0.48 * candidate.identity_score + 0.24 * candidate.address_score + 0.28 * tier_weight + office_bonus) * listing_factor * property_factor)
+
+
+def confidence_label(score: float, authoritative: bool, independent_domains: int, margin: float) -> str:
+    if score >= 0.90 and authoritative and independent_domains >= 1 and margin >= 0.14:
+        return "Verified"
+    if score >= 0.82 and independent_domains >= 2 and margin >= 0.10:
+        return "Very Likely"
+    if score >= 0.70 and margin >= 0.07:
+        return "Likely"
+    if score >= 0.55:
+        return "Needs Review"
+    return "Unresolved"
+
+
 def resolve_one(lic: str, name: str, broker: str, api_key: str, cfg: dict[str, Any], cache: dict[str, Any], cache_path: Path, audit_path: Path) -> Result:
     delay = float(cfg["request_delay_seconds"])
-    # Office-first search strategy. Listing domains are excluded from primary searches
-    # and may only corroborate a location already found on an office/business source.
     negative_sites = "-site:zillow.com -site:redfin.com -site:realtor.com -site:homes.com -site:har.com -site:trulia.com -site:loopnet.com -site:crexi.com"
     queries = [
         f'"{name}" contact office address Texas {negative_sites}',
         f'"{name}" (contact OR office OR headquarters OR location) Texas {negative_sites}',
         f'"{name}" "{lic}" Texas {negative_sites}',
-        f'"{name}" "{broker}" contact Texas {negative_sites}' if broker else f'"{name}" broker contact Texas {negative_sites}',
-        f'"{name}" (BBB OR chamber OR business) Texas {negative_sites}',
+        f'"{name}" "{broker}" Texas address' if broker else f'"{name}" broker Texas address',
+        f'"{name}" Texas listings',
     ]
-    raw: list[Candidate] = []
-    corroboration: list[Candidate] = []
+    candidates: list[Candidate] = []
     seen_pages: set[str] = set()
     page_budget = int(cfg["max_pages_per_record"])
     contact_budget = int(cfg.get("max_contact_pages_per_record", 4))
@@ -439,22 +457,18 @@ def resolve_one(lic: str, name: str, broker: str, api_key: str, cfg: dict[str, A
             url, title, snippet = row["link"], row["title"], row["snippet"]
             if not url:
                 continue
-            listing = is_listing_domain(url)
-            target = corroboration if listing else raw
             for address in extract_addresses(f"{title} {snippet}"):
-                target.append(build_candidate(lic, name, broker, address, url, title, snippet, "search snippet"))
+                candidates.append(build_candidate(lic, name, broker, address, url, title, snippet, "search snippet"))
 
             tier, _ = source_profile(url)
-            preliminary_ident = identity_score(name, broker, lic, title, snippet, url)
-            should_fetch = (not listing and (is_office_page(url, title, snippet) or tier >= 3) and preliminary_ident >= 0.32)
+            ident = identity_score(name, broker, lic, title, snippet, url)
+            should_fetch = (not is_listing_domain(url) and (is_office_page(url, title, snippet) or tier >= 3) and ident >= 0.30)
             if url not in seen_pages and page_budget > 0 and should_fetch:
                 seen_pages.add(url)
                 page_budget -= 1
                 ptitle, ptext, addresses, office_links = fetch_page(url, delay)
                 for address in addresses:
-                    raw.append(build_candidate(lic, name, broker, address, url, ptitle or title, ptext or snippet, "office/business page"))
-
-                # Follow same-domain Contact/About/Office pages discovered on an official site.
+                    candidates.append(build_candidate(lic, name, broker, address, url, ptitle or title, ptext or snippet, "office/business page"))
                 for office_url in office_links:
                     if contact_budget <= 0 or office_url in seen_pages:
                         break
@@ -462,82 +476,83 @@ def resolve_one(lic: str, name: str, broker: str, api_key: str, cfg: dict[str, A
                     contact_budget -= 1
                     ctitle, ctext, caddresses, _ = fetch_page(office_url, delay)
                     for address in caddresses:
-                        raw.append(build_candidate(lic, name, broker, address, office_url, ctitle, ctext, "linked contact/office page"))
+                        candidates.append(build_candidate(lic, name, broker, address, office_url, ctitle, ctext, "linked contact/office page"))
 
     dedup: dict[tuple[str, str], Candidate] = {}
-    for c in raw + corroboration:
+    for c in candidates:
         key = (normalize_address(c.address), c.source_domain)
         if key not in dedup or c.total_score > dedup[key].total_score:
             dedup[key] = c
     candidates = sorted(dedup.values(), key=lambda c: c.total_score, reverse=True)
 
     minimum_identity = float(cfg["minimum_identity_score"])
-    primary = [
-        c for c in candidates
-        if not is_listing_domain(c.url)
-        and c.negative_score < 0.85
-        and (
-            (c.source_tier >= 2 and c.identity_score >= minimum_identity)
-            or (c.source_tier >= 4 and c.identity_score >= max(0.30, minimum_identity - 0.16))
-        )
-    ]
-
-    for c in primary[:20]:
+    eligible = [c for c in candidates if c.identity_score >= max(0.28, minimum_identity - 0.12) and c.negative_score < 1.0]
+    geocode_limit = int(cfg.get("max_geocodes_per_record", 24))
+    for c in eligible[:geocode_limit]:
         geo = census_geocode(c.address, delay)
         if geo and geo.get("county") and geo.get("state", "TX").upper() == "TX":
             c.matched_address, c.city, c.state, c.zip_code, c.county = geo["matched_address"], geo["city"], geo["state"], geo["zip_code"], geo["county"]
 
-    # Listing sites can only add corroboration after a primary business address exists.
-    geocoded_primary = [c for c in primary if c.county]
-    for c in corroboration[:10]:
-        if not geocoded_primary or c.negative_score >= 0.85:
+    audit_candidates(audit_path, candidates[:40])
+    geocoded = [c for c in eligible if c.county]
+    if not geocoded:
+        return Result(lic, name, broker, status="Unresolved", notes="No Texas county evidence could be geocoded from the available sources.", updated_at=now_utc())
+
+    votes: dict[str, float] = defaultdict(float)
+    county_candidates: dict[str, list[Candidate]] = defaultdict(list)
+    county_domains: dict[str, set[str]] = defaultdict(set)
+    for c in geocoded:
+        weight = county_vote_weight(c)
+        if weight <= 0:
             continue
-        geo = census_geocode(c.address, delay)
-        if geo and geo.get("county"):
-            c.matched_address, c.city, c.state, c.zip_code, c.county = geo["matched_address"], geo["city"], geo["state"], geo["zip_code"], geo["county"]
+        # One domain cannot overwhelm the vote by repeating the same county many times.
+        domain_key = (c.county, c.source_domain)
+        existing = [x for x in county_candidates[c.county] if x.source_domain == c.source_domain]
+        if existing and max(county_vote_weight(x) for x in existing) >= weight:
+            continue
+        if existing:
+            old = max(existing, key=county_vote_weight)
+            votes[c.county] -= county_vote_weight(old)
+            county_candidates[c.county].remove(old)
+        votes[c.county] += weight
+        county_candidates[c.county].append(c)
+        county_domains[c.county].add(c.source_domain)
 
-    groups: dict[str, list[Candidate]] = defaultdict(list)
-    for c in geocoded_primary:
-        groups[normalize_address(c.matched_address or c.address)].append(c)
-    ranked: list[tuple[float, list[Candidate]]] = []
-    for key, group in groups.items():
-        domains = {c.source_domain for c in group}
-        best = max(c.total_score for c in group)
-        authoritative = max(c.source_tier for c in group)
-        consensus_bonus = min(0.16, 0.08 * (len(domains) - 1))
-        # Corroboration only counts when it resolves to the same county as the primary group.
-        county = group[0].county
-        listing_support = len({c.source_domain for c in corroboration if c.county == county})
-        corroboration_bonus = min(0.05, 0.02 * listing_support)
-        final = min(0.99, best + consensus_bonus + corroboration_bonus + (0.05 if authoritative >= 4 else 0))
-        ranked.append((final, sorted(group, key=lambda c: c.total_score, reverse=True)))
-    ranked.sort(key=lambda x: x[0], reverse=True)
-
-    audit_candidates(audit_path, candidates[:35])
+    ranked = sorted(votes.items(), key=lambda x: x[1], reverse=True)
     if not ranked:
-        return Result(lic, name, broker, status="Unresolved", notes="No office/contact-page Texas business address could be verified and geocoded. Listing-site addresses were retained only as secondary evidence.", updated_at=now_utc())
+        return Result(lic, name, broker, status="Unresolved", notes="Evidence was found, but none met the minimum county-vote quality threshold.", updated_at=now_utc())
 
-    score, group = ranked[0]
+    top_county, top_vote = ranked[0]
+    second_vote = ranked[1][1] if len(ranked) > 1 else 0.0
+    total_vote = sum(votes.values()) or 1.0
+    share = top_vote / total_vote
+    margin = (top_vote - second_vote) / total_vote
+    group = sorted(county_candidates[top_county], key=county_vote_weight, reverse=True)
     best = group[0]
-    source_count = len({c.source_domain for c in group})
-    has_authoritative = any(c.source_tier >= 4 for c in group)
-    auto_accept = float(cfg["auto_accept_score"])
-    review_score = float(cfg["review_score"])
-    if score >= auto_accept and (has_authoritative or source_count >= 2):
-        status = "Verified"
-    elif score >= review_score:
-        status = "Needs Review"
-    else:
-        status = "Unresolved"
-    county = best.county if status != "Unresolved" else ""
+    domains = county_domains[top_county]
+    authoritative = any(c.source_tier >= 4 and not is_listing_domain(c.url) for c in group)
+    evidence_strength = min(1.0, top_vote / 1.75)
+    confidence = min(0.99, 0.58 * share + 0.27 * evidence_strength + 0.15 * min(1.0, len(domains) / 3))
+    status = confidence_label(confidence, authoritative, len(domains), margin)
+
+    # Listing concentration may support Likely/Review, but never creates Verified by itself.
+    non_listing = [c for c in group if not is_listing_domain(c.url)]
+    if not non_listing and status in {"Verified", "Very Likely"}:
+        status = "Likely"
+        confidence = min(confidence, 0.79)
+
+    county = top_county if status != "Unresolved" else ""
     secondary = next((c.url for c in group[1:] if c.source_domain != best.source_domain), "")
-    notes = f"Office/contact pages were prioritized. {source_count} independent primary source domain(s) support the selected business address; listing sites were secondary corroboration only."
+    notes = (
+        f"County evidence vote selected {top_county}: vote share={share:.2f}, margin={margin:.2f}, "
+        f"{len(domains)} independent domain(s), authoritative_source={'yes' if authoritative else 'no'}. "
+        "Listing concentration was weighted as secondary evidence and could not independently produce Verified status."
+    )
     return Result(
         lic, name, broker, best.matched_address, best.city, best.state, best.zip_code, county,
-        status, round(score, 3), best.identity_score, source_count, best.url, secondary,
-        best.source_type, notes, now_utc(),
+        status, round(confidence, 3), best.identity_score, len(domains), best.url, secondary,
+        "County evidence vote; " + best.source_type, notes, now_utc(), evidence_count=len(group),
     )
-
 
 def find_columns(ws) -> tuple[int, int, int, int | None]:
     headers = {clean(c.value).lower(): c.column for c in ws[1]}
@@ -632,7 +647,7 @@ def should_process(old: Result | None, mode: str, cfg: dict[str, Any]) -> bool:
     if mode == "recheck_all":
         return True
     if mode in {"recheck_review", "recheck_unresolved"}:
-        return old.status in ({"Needs Review", "Unresolved"} if mode == "recheck_review" else {"Unresolved", "Error"})
+        return old.status in ({"Very Likely", "Likely", "Needs Review", "Unresolved"} if mode == "recheck_review" else {"Unresolved", "Error"})
     if mode == "upgrade_confidence":
         return old.confidence < threshold or old.status != "Verified"
     if mode == "upgrade_version":
