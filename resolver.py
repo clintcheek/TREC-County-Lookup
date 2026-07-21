@@ -25,8 +25,8 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from rapidfuzz.fuzz import token_set_ratio
 
-RESOLVER_VERSION = "v7.2"
-USER_AGENT = "TexasBrokerCountyResolver/7.2 (private license-location research)"
+RESOLVER_VERSION = "v7.3"
+USER_AGENT = "TexasBrokerCountyResolver/7.3 (private license-location research)"
 ADDRESS_RE = re.compile(
     r"\b(\d{1,6}\s+[A-Za-z0-9.'#&\- ]{2,80}?\s(?:Street|St|Road|Rd|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Lane|Ln|Court|Ct|Parkway|Pkwy|Highway|Hwy|Loop|Way|Trail|Trl|Circle|Cir|Plaza|Place|Pl|Terrace|Ter)\.?"
     r"(?:\s*(?:Suite|Ste|Unit|#)\s*[A-Za-z0-9\-]+)?\s*,?\s*[A-Za-z.'\- ]{2,45},?\s*(?:TX|Texas|[A-Z]{2})\s+\d{5}(?:-\d{4})?)\b",
@@ -468,36 +468,65 @@ def audit_candidates(path: Path, candidates: list[Candidate]) -> None:
                 w.writerow(asdict(c))
 
 
+def relationship_score(candidate: Candidate) -> float:
+    """Measure repeated person + brokerage identity, independent of the displayed address."""
+    hay = re.sub(r"[^a-z0-9 ]", " ", clean(f"{candidate.page_title} {candidate.evidence_text} {candidate.url}").lower())
+    firm = normalized_name(candidate.brokerage_name)
+    person = normalized_name(candidate.related_broker_name)
+    firm_exact = bool(firm and firm in hay)
+    person_exact = bool(person and person in hay)
+    license_hit = canonical_license(candidate.license_number).lower() in hay
+    score = 0.0
+    if firm_exact:
+        score += 0.42
+    if person_exact:
+        score += 0.42
+    if firm_exact and person_exact:
+        score += 0.12
+    if license_hit:
+        score += 0.22
+    return min(1.0, score)
+
+
 def county_vote_weight(candidate: Candidate) -> float:
-    """Convert source quality, identity, context, and listing risk into a county vote."""
-    tier_weight = {0: 0.0, 1: 0.16, 2: 0.42, 3: 0.68, 4: 0.88, 5: 1.0}.get(candidate.source_tier, 0.2)
+    """Convert source quality, identity and person/firm co-occurrence into a county vote."""
+    tier_weight = {0: 0.12, 1: 0.24, 2: 0.42, 3: 0.68, 4: 0.88, 5: 1.0}.get(candidate.source_tier, 0.2)
+    relation = relationship_score(candidate)
     office_bonus = 0.12 if is_office_page(candidate.url, candidate.page_title, candidate.evidence_text) else 0.0
-    listing_factor = 0.32 if is_listing_domain(candidate.url) else 1.0
-    property_factor = max(0.05, 1.0 - candidate.negative_score)
-    return max(0.0, (0.48 * candidate.identity_score + 0.24 * candidate.address_score + 0.28 * tier_weight + office_bonus) * listing_factor * property_factor)
+    listing = is_listing_domain(candidate.url) or candidate.negative_score >= 0.80
+    # Listing addresses are not office addresses, but repeated person+firm appearances
+    # are useful operating-county evidence. Strong relationships receive a larger vote.
+    listing_factor = (0.68 if relation >= 0.78 else 0.48 if relation >= 0.50 else 0.28) if listing else 1.0
+    property_factor = 0.72 if listing and relation >= 0.78 else 0.50 if listing and relation >= 0.50 else max(0.12, 1.0 - candidate.negative_score)
+    base = 0.36 * candidate.identity_score + 0.18 * candidate.address_score + 0.22 * tier_weight + 0.24 * relation + office_bonus
+    return max(0.0, base * listing_factor * property_factor)
 
 
-def confidence_label(score: float, authoritative: bool, independent_domains: int, margin: float) -> str:
-    if score >= 0.90 and authoritative and independent_domains >= 1 and margin >= 0.14:
+def confidence_label(score: float, authoritative: bool, independent_domains: int, margin: float, occurrences: int, strong_relationships: int) -> str:
+    # v7.3 is optimized for usable lead generation rather than near-perfect registry reconstruction.
+    if score >= 0.86 and margin >= 0.12 and (authoritative or (independent_domains >= 3 and strong_relationships >= 2)):
         return "Verified"
-    if score >= 0.82 and independent_domains >= 2 and margin >= 0.10:
+    if score >= 0.76 and margin >= 0.08 and independent_domains >= 2:
         return "Very Likely"
-    if score >= 0.70 and margin >= 0.07:
+    if score >= 0.60 and margin >= 0.05 and (independent_domains >= 2 or occurrences >= 4):
         return "Likely"
-    if score >= 0.55:
+    if score >= 0.42 and margin >= 0.02:
         return "Needs Review"
     return "Unresolved"
 
 
 def build_queries(lic: str, name: str, broker: str) -> list[str]:
     negative_sites = "-site:zillow.com -site:redfin.com -site:realtor.com -site:homes.com -site:har.com -site:trulia.com -site:loopnet.com -site:crexi.com"
-    return [
+    queries = [
         f'"{name}" contact office address Texas {negative_sites}',
         f'"{name}" (contact OR office OR headquarters OR location) Texas {negative_sites}',
-        f'"{name}" "{lic}" Texas {negative_sites}',
-        f'"{name}" "{broker}" Texas address' if broker else f'"{name}" broker Texas address',
+        f'"{name}" "{lic}" Texas',
+        f'"{name}" "{broker}" Texas' if broker else f'"{name}" broker Texas',
         f'"{name}" Texas listings',
     ]
+    if broker:
+        queries.append(f'"{broker}" "{name}" (listing OR broker OR realtor) Texas')
+    return queries
 
 
 def resolve_one(lic: str, name: str, broker: str, api_key: str, cfg: dict[str, Any], cache: dict[str, Any], cache_path: Path, audit_path: Path) -> Result:
@@ -560,7 +589,11 @@ def resolve_one(lic: str, name: str, broker: str, api_key: str, cfg: dict[str, A
     candidates = sorted(dedup.values(), key=lambda c: c.total_score, reverse=True)
 
     minimum_identity = float(cfg["minimum_identity_score"])
-    eligible = [c for c in candidates if c.identity_score >= max(0.28, minimum_identity - 0.12) and c.negative_score < 1.0]
+    eligible = [
+        c for c in candidates
+        if c.identity_score >= max(0.24, minimum_identity - 0.16)
+        and (c.negative_score < 1.0 or relationship_score(c) >= 0.50)
+    ]
     geocode_limit = int(cfg.get("max_geocodes_per_record", 24))
     for c in eligible[:geocode_limit]:
         geo = census_geocode(c.address, delay)
@@ -583,22 +616,31 @@ def resolve_one(lic: str, name: str, broker: str, api_key: str, cfg: dict[str, A
     votes: dict[str, float] = defaultdict(float)
     county_candidates: dict[str, list[Candidate]] = defaultdict(list)
     county_domains: dict[str, set[str]] = defaultdict(set)
+    county_occurrences: dict[str, int] = defaultdict(int)
+    county_strong_relationships: dict[str, int] = defaultdict(int)
+
+    # Aggregate repeated appearances with diminishing returns. A single website cannot
+    # dominate, but several distinct listings on the same site still add useful evidence.
+    by_county_domain: dict[tuple[str, str], list[Candidate]] = defaultdict(list)
     for c in geocoded:
-        weight = county_vote_weight(c)
-        if weight <= 0:
-            continue
-        # One domain cannot overwhelm the vote by repeating the same county many times.
-        domain_key = (c.county, c.source_domain)
-        existing = [x for x in county_candidates[c.county] if x.source_domain == c.source_domain]
-        if existing and max(county_vote_weight(x) for x in existing) >= weight:
-            continue
-        if existing:
-            old = max(existing, key=county_vote_weight)
-            votes[c.county] -= county_vote_weight(old)
-            county_candidates[c.county].remove(old)
-        votes[c.county] += weight
-        county_candidates[c.county].append(c)
-        county_domains[c.county].add(c.source_domain)
+        by_county_domain[(c.county, c.source_domain)].append(c)
+
+    diminishing = (1.0, 0.38, 0.24, 0.16, 0.10)
+    for (county_name, domain), items in by_county_domain.items():
+        ranked_items = sorted(items, key=county_vote_weight, reverse=True)
+        domain_vote = 0.0
+        for index, c in enumerate(ranked_items[: len(diminishing)]):
+            weight = county_vote_weight(c) * diminishing[index]
+            if weight <= 0:
+                continue
+            domain_vote += weight
+            county_candidates[county_name].append(c)
+            county_occurrences[county_name] += 1
+            if relationship_score(c) >= 0.78:
+                county_strong_relationships[county_name] += 1
+        if domain_vote > 0:
+            votes[county_name] += domain_vote
+            county_domains[county_name].add(domain)
 
     ranked = sorted(votes.items(), key=lambda x: x[1], reverse=True)
     if not ranked:
@@ -612,28 +654,41 @@ def resolve_one(lic: str, name: str, broker: str, api_key: str, cfg: dict[str, A
     group = sorted(county_candidates[top_county], key=county_vote_weight, reverse=True)
     best = group[0]
     domains = county_domains[top_county]
-    authoritative = any(c.source_tier >= 4 and not is_listing_domain(c.url) for c in group)
-    evidence_strength = min(1.0, top_vote / 1.75)
-    confidence = min(0.99, 0.58 * share + 0.27 * evidence_strength + 0.15 * min(1.0, len(domains) / 3))
-    status = confidence_label(confidence, authoritative, len(domains), margin)
+    occurrences = county_occurrences[top_county]
+    strong_relationships = county_strong_relationships[top_county]
+    authoritative = any(c.source_tier >= 4 and not is_listing_domain(c.url) and c.negative_score < 0.80 for c in group)
+    evidence_strength = min(1.0, top_vote / 1.45)
+    density_strength = min(1.0, occurrences / 6)
+    relationship_strength = min(1.0, strong_relationships / 3)
+    confidence = min(0.99, 0.43 * share + 0.22 * evidence_strength + 0.15 * min(1.0, len(domains) / 3) + 0.10 * density_strength + 0.10 * relationship_strength)
+    status = confidence_label(confidence, authoritative, len(domains), margin, occurrences, strong_relationships)
 
-    # Listing concentration may support Likely/Review, but never creates Verified by itself.
-    non_listing = [c for c in group if not is_listing_domain(c.url)]
-    if not non_listing and status in {"Verified", "Very Likely"}:
-        status = "Likely"
-        confidence = min(confidence, 0.79)
+    non_listing = [c for c in group if not is_listing_domain(c.url) and c.negative_score < 0.80]
+    listing_only = not non_listing
+    # Repeated person+firm evidence across independent sites may reach Very Likely,
+    # but listing-only evidence still cannot claim a verified office address.
+    if listing_only and status == "Verified":
+        status = "Very Likely"
+        confidence = min(confidence, 0.85)
 
     county = top_county if status != "Unresolved" else ""
     secondary = next((c.url for c in group[1:] if c.source_domain != best.source_domain), "")
+    inference_type = "Operating-county inference" if listing_only or best.negative_score >= 0.80 else "County evidence vote"
     notes = (
-        f"County evidence vote selected {top_county}: vote share={share:.2f}, margin={margin:.2f}, "
-        f"{len(domains)} independent domain(s), authoritative_source={'yes' if authoritative else 'no'}. "
-        "Listing concentration was weighted as secondary evidence and could not independently produce Verified status."
+        f"{inference_type} selected {top_county}: vote share={share:.2f}, margin={margin:.2f}, "
+        f"{len(domains)} independent domain(s), {occurrences} supporting occurrence(s), "
+        f"{strong_relationships} strong person+brokerage relationship match(es), "
+        f"authoritative_source={'yes' if authoritative else 'no'}. "
+        "Repeated appearances were counted with diminishing returns; listing addresses were used as operating-area evidence, not presumed office addresses."
     )
+    office_address = "" if listing_only or best.negative_score >= 0.80 else best.matched_address
+    city = "" if listing_only or best.negative_score >= 0.80 else best.city
+    state = "TX" if county else ""
+    zip_code = "" if listing_only or best.negative_score >= 0.80 else best.zip_code
     return Result(
-        lic, name, broker, best.matched_address, best.city, best.state, best.zip_code, county,
+        lic, name, broker, office_address, city, state, zip_code, county,
         status, round(confidence, 3), best.identity_score, len(domains), best.url, secondary,
-        "County evidence vote; " + best.source_type, notes, now_utc(), evidence_count=len(group),
+        inference_type + "; " + best.source_type, notes, now_utc(), evidence_count=occurrences,
     )
 
 def find_columns(ws) -> tuple[int, int, int, int | None]:
