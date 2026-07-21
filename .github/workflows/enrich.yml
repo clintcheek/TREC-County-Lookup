@@ -1,4 +1,4 @@
-name: Enrich Texas Broker Counties v6
+name: Enrich Texas Broker Counties v7
 
 "on":
   workflow_dispatch:
@@ -34,7 +34,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: texas-broker-enrichment-v6
+  group: texas-broker-enrichment-v7
   cancel-in-progress: false
 
 jobs:
@@ -44,12 +44,12 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -94,9 +94,9 @@ jobs:
 
       - name: Upload recovery artifact
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
-          name: texas-brokers-enriched-v6-${{ github.run_number }}
+          name: texas-brokers-enriched-v7-${{ github.run_number }}
           path: |
             output/**
             state/**
