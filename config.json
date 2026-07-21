@@ -1,0 +1,18 @@
+{
+  "input_file": "input/brokers.xlsx",
+  "output_file": "output/brokers_enriched.xlsx",
+  "checkpoint_file": "state/results.csv",
+  "candidate_audit_file": "state/candidates.csv",
+  "search_cache_file": "state/search_cache.json",
+  "max_rows_per_run": 100,
+  "workers": 4,
+  "request_delay_seconds": 0.55,
+  "auto_accept_score": 0.9,
+  "review_score": 0.68,
+  "minimum_identity_score": 0.62,
+  "max_search_results": 10,
+  "max_pages_per_record": 8,
+  "recheck_after_days": 180,
+  "checkpoint_metadata_file": "state/checkpoint.json",
+  "checkpoint_every": 25
+}
