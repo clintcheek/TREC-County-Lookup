@@ -1,1 +1,100 @@
+name: Enrich Texas Broker Counties v3
 
+"on":
+  workflow_dispatch:
+    inputs:
+      max_rows:
+        description: Records to process in this run
+        required: true
+        default: "100"
+        type: string
+      mode:
+        description: Processing mode
+        required: true
+        default: new
+        type: choice
+        options:
+          - new
+          - recheck_review
+          - recheck_all
+      checkpoint_every:
+        description: Save workbook and state after this many completed records
+        required: true
+        default: "25"
+        type: string
+  schedule:
+    - cron: "17 */6 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: texas-broker-enrichment-v3
+  cancel-in-progress: false
+
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Validate repository
+        run: |
+          test -f resolver.py
+          test -f config.json
+          test -f input/brokers.xlsx
+          mkdir -p output state
+
+      - name: Resolve counties with checkpointing
+        env:
+          SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
+          MAX_ROWS: ${{ inputs.max_rows || '100' }}
+          RUN_MODE: ${{ inputs.mode || 'new' }}
+          CHECKPOINT_EVERY: ${{ inputs.checkpoint_every || '25' }}
+        run: |
+          python resolver.py \
+            --max-rows "$MAX_ROWS" \
+            --mode "$RUN_MODE" \
+            --checkpoint-every "$CHECKPOINT_EVERY"
+
+      - name: Save progress to repository
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A state output
+          if git diff --cached --quiet; then
+            echo "No progress changes to commit"
+          else
+            git commit -m "Save broker enrichment checkpoint"
+            git pull --rebase
+            git push
+          fi
+
+      - name: Upload recovery artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: texas-brokers-enriched-v3-${{ github.run_number }}
+          path: |
+            output/**
+            state/**
+          if-no-files-found: warn
+          retention-days: 30
+          include-hidden-files: true
