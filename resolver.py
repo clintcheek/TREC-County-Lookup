@@ -25,14 +25,18 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from rapidfuzz.fuzz import token_set_ratio
 
-RESOLVER_VERSION = "v7"
-USER_AGENT = "TexasBrokerCountyResolver/7.0 (private license-location research)"
+RESOLVER_VERSION = "v7.1"
+USER_AGENT = "TexasBrokerCountyResolver/7.1 (private license-location research)"
 ADDRESS_RE = re.compile(
     r"\b(\d{1,6}\s+[A-Za-z0-9.'#&\- ]{2,80}?\s(?:Street|St|Road|Rd|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Lane|Ln|Court|Ct|Parkway|Pkwy|Highway|Hwy|Loop|Way|Trail|Trl|Circle|Cir|Plaza|Place|Pl|Terrace|Ter)\.?"
     r"(?:\s*(?:Suite|Ste|Unit|#)\s*[A-Za-z0-9\-]+)?\s*,?\s*[A-Za-z.'\- ]{2,45},?\s*(?:TX|Texas|[A-Z]{2})\s+\d{5}(?:-\d{4})?)\b",
     re.I,
 )
 ZIP_RE = re.compile(r"\b\d{5}(?:-\d{4})?\b")
+LOOSE_ADDRESS_RE = re.compile(
+    r"\b(\d{1,6}\s+[A-Za-z0-9.'#&/\- ]{2,100}?,\s*[A-Za-z.'\- ]{2,45},?\s*(?:TX|Texas)\s+\d{5}(?:-\d{4})?)\b",
+    re.I,
+)
 PROPERTY_TERMS = re.compile(
     r"\b(for sale|for lease|sold|pending|bed(?:room)?s?|bath(?:room)?s?|sq\.?\s*ft|acre(?:s)?|mls|listing price|property details|home value|open house)\b",
     re.I,
@@ -240,10 +244,14 @@ def source_profile(url: str) -> tuple[int, str]:
 def extract_addresses(text: str) -> list[str]:
     text = html.unescape(re.sub(r"\s+", " ", text or " "))
     out: list[str] = []
-    for m in ADDRESS_RE.findall(text):
-        a = clean(m).strip(" ,.;")
-        if a not in out:
-            out.append(a)
+    for pattern in (ADDRESS_RE, LOOSE_ADDRESS_RE):
+        for m in pattern.findall(text):
+            a = clean(m).strip(" ,.;")
+            # Reject obvious fragments while allowing numbered streets such as "2810 S. 27th".
+            if len(a) < 12 or not ZIP_RE.search(a) or not re.search(r"\b(?:TX|Texas)\b", a, re.I):
+                continue
+            if a not in out:
+                out.append(a)
     return out
 
 
@@ -301,23 +309,33 @@ def serper_search(query: str, api_key: str, delay: float, cache: dict[str, Any],
     with _cache_lock:
         if key in cache:
             return cache[key]
-    time.sleep(delay)
-    r = session().post(
-        "https://google.serper.dev/search",
-        headers={"X-API-KEY": api_key, "Content-Type": "application/json"},
-        json={"q": query, "gl": "us", "hl": "en", "num": max_results},
-        timeout=40,
-    )
-    r.raise_for_status()
-    payload = r.json()
-    rows = [{
-        "title": clean(i.get("title")), "link": clean(i.get("link")), "snippet": clean(i.get("snippet"))
-    } for i in payload.get("organic", [])]
-    with _cache_lock:
-        cache[key] = rows
-        if len(cache) % 25 == 0:
-            save_search_cache(cache_path, cache)
-    return rows
+    if not clean(api_key):
+        raise RuntimeError("SERPER_API_KEY is missing or empty")
+    last_error = ""
+    for attempt in range(3):
+        time.sleep(delay * (attempt + 1))
+        try:
+            r = session().post(
+                "https://google.serper.dev/search",
+                headers={"X-API-KEY": api_key, "Content-Type": "application/json"},
+                json={"q": query, "gl": "us", "hl": "en", "num": max_results},
+                timeout=40,
+            )
+            if r.status_code >= 400:
+                detail = clean(r.text)[:240]
+                raise RuntimeError(f"Serper HTTP {r.status_code}: {detail}")
+            payload = r.json()
+            rows = [{
+                "title": clean(i.get("title")), "link": clean(i.get("link")), "snippet": clean(i.get("snippet"))
+            } for i in payload.get("organic", [])]
+            with _cache_lock:
+                cache[key] = rows
+            return rows
+        except Exception as exc:
+            last_error = f"{type(exc).__name__}: {exc}"
+            if "HTTP 401" in last_error or "HTTP 403" in last_error:
+                break
+    raise RuntimeError(last_error or "Unknown Serper search failure")
 
 
 def fetch_page(url: str, delay: float) -> tuple[str, str, list[str], list[str]]:
@@ -444,6 +462,8 @@ def resolve_one(lic: str, name: str, broker: str, api_key: str, cfg: dict[str, A
         f'"{name}" Texas listings',
     ]
     candidates: list[Candidate] = []
+    search_errors: list[str] = []
+    successful_searches = 0
     seen_pages: set[str] = set()
     page_budget = int(cfg["max_pages_per_record"])
     contact_budget = int(cfg.get("max_contact_pages_per_record", 4))
@@ -451,7 +471,9 @@ def resolve_one(lic: str, name: str, broker: str, api_key: str, cfg: dict[str, A
     for q in queries:
         try:
             rows = serper_search(q, api_key, delay, cache, cache_path, int(cfg["max_search_results"]))
-        except Exception:
+            successful_searches += 1
+        except Exception as exc:
+            search_errors.append(f"{type(exc).__name__}: {exc}")
             continue
         for row in rows:
             url, title, snippet = row["link"], row["title"], row["snippet"]
@@ -478,6 +500,14 @@ def resolve_one(lic: str, name: str, broker: str, api_key: str, cfg: dict[str, A
                     for address in caddresses:
                         candidates.append(build_candidate(lic, name, broker, address, office_url, ctitle, ctext, "linked contact/office page"))
 
+    if successful_searches == 0:
+        detail = " | ".join(dict.fromkeys(search_errors))[:1200]
+        return Result(
+            lic, name, broker, status="Error",
+            notes="Search provider failed for every query; geocoding was not reached. " + detail,
+            updated_at=now_utc(),
+        )
+
     dedup: dict[tuple[str, str], Candidate] = {}
     for c in candidates:
         key = (normalize_address(c.address), c.source_domain)
@@ -496,7 +526,15 @@ def resolve_one(lic: str, name: str, broker: str, api_key: str, cfg: dict[str, A
     audit_candidates(audit_path, candidates[:40])
     geocoded = [c for c in eligible if c.county]
     if not geocoded:
-        return Result(lic, name, broker, status="Unresolved", notes="No Texas county evidence could be geocoded from the available sources.", updated_at=now_utc())
+        if not candidates:
+            note = f"Search completed ({successful_searches}/{len(queries)} queries), but no Texas address candidates were extracted."
+        elif not eligible:
+            note = f"Found {len(candidates)} address candidate(s), but none passed the identity/property gates."
+        else:
+            note = f"Found {len(candidates)} candidate(s); {len(eligible)} reached geocoding, but Census returned no Texas county match."
+        if search_errors:
+            note += " Some searches also failed: " + " | ".join(dict.fromkeys(search_errors))[:500]
+        return Result(lic, name, broker, status="Unresolved", notes=note, updated_at=now_utc())
 
     votes: dict[str, float] = defaultdict(float)
     county_candidates: dict[str, list[Candidate]] = defaultdict(list)
