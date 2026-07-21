@@ -1,5 +1,6 @@
 ﻿license_number,brokerage_name,related_broker_name,office_address,city,state,zip_code,county,status,confidence,identity_score,consensus_sources,evidence_url,secondary_evidence_url,evidence_type,notes,updated_at
 202405-BB,"J.B. SUDDERTH REALTY, INC.",DAREN LEN SUDDERTH,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:26:09Z
+241905-BB,PROJECTS AMERICAN CORPORATION,JIM CHARLES RAWSON,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:06Z
 254328-BB,"REAL ESTATE ENTERPRISES, INC.",KAREN DENISE KING,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T16:41:17Z
 271165-BB,DONNA SHIRLEY REALTY CO.,MARGARET SUE SHIRLEY,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:26:15Z
 298727-BB,"LEVCOR, INC",HERBERT L LEVINE,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T16:54:55Z
@@ -8,8 +9,12 @@
 311324-BB,"FIRST HOUSTON PROPERTIES, INC",ARON K GRENADER,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:19:15Z
 316045-BB,"KEY ALLEGRO REAL ESTATE I, INC",KELLY LAYTON HANCOCK,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:26:16Z
 325425-BB,4M REALTY COMPANY,MICHAEL WEISS,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:26:16Z
+326651-BB,FORTUNE REAL ESTATE INC,LAURA SALOME,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:04Z
+327556-BB,GULF SOUTH INVESTMENTS INC,YING SHI LAI,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:06Z
 334806-BB,CREATIVE PROPERTY MGMT COMPANY,GREGORY SCOTT DOUGLAS,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:26:08Z
 348885-BB,"APPRAISALS AND INSPECTIONS, INC",JACKSON B OSBORNE,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:26:15Z
+365025-BB,"MORELAND PROPERTIES, INC",SARAH VIRGINIA RAILEY,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:04Z
+377543-BB,"AVANGARD REAL ESTATE SERVICES, INC.",ANTONIO MATARRANZ,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:04Z
 380305-BB,"NEWMAN REAL ESTATE, INC",JIM RANDELL NEWMAN,"9801 CAMFIELD RD, FRISCO, TX, 75033",FRISCO,TX,75033,Collin,Needs Review,0.872,0.8,1,https://jrnewman.com/,,Possible official website; search snippet,Identity and address evaluated separately. 1 independent source domain(s) support the selected address. Property-listing candidates were rejected.,2026-07-21T16:41:19Z
 386851-BB,"GOODWIN EMPLOYEE LEASING, INC",GUY CLIFFORD GOODWIN,"5903 LAKESIDE TRL, AUSTIN, TX, 78734",AUSTIN,TX,78734,Travis,Verified,0.927,0.896,1,https://licensee.io/real-estate/386851-goodwin-employee-leasing-inc-tx/,,Possible official website; page,Identity and address evaluated separately. 1 independent source domain(s) support the selected address. Property-listing candidates were rejected.,2026-07-21T17:19:05Z
 386852-BB,"GOODWIN SVCS, INC.",GUY CLIFFORD GOODWIN,"5903 LAKESIDE TRL, AUSTIN, TX, 78734",AUSTIN,TX,78734,Travis,Verified,0.908,0.863,1,https://licensee.io/real-estate/386852-goodwin-svcs-inc.-tx/,,Possible official website; page,Identity and address evaluated separately. 1 independent source domain(s) support the selected address. Property-listing candidates were rejected.,2026-07-21T17:19:08Z
@@ -17,6 +22,7 @@
 387985-BB,"MICHAEL'S REALTY, INC",MICHAEL JAMES XUEREB,"521 CLASSEN DR, DALLAS, TX, 75218",DALLAS,TX,75218,Dallas,Verified,0.95,0.935,1,https://licensee.io/real-estate/489151-michael-james-xuereb-tx/,,Possible official website; page,Identity and address evaluated separately. 1 independent source domain(s) support the selected address. Property-listing candidates were rejected.,2026-07-21T16:42:06Z
 388200-BB,"YATES-LAGRASTA, INC",STEPHEN MICHAEL LAGRASTA,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T16:41:10Z
 390938-BB,"HARRELL REALTY MANAGEMENT SYSTEMS, INC",BRUCE WELDON HARRELL,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:18:53Z
+392345-BB,"SAS & ASSOCIATES, INC",RAUL AGUILAR,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:04Z
 400858-BB,"REAL ESTATE BY PAT GRAY & ASSOC, INC",PATSY GRAY,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:26:13Z
 401656-BB,CAPITAL PROPERTIES INC,RICHARD NEVILLE EGAN,"4624 DEPEW AVE, AUSTIN, TX, 78751",AUSTIN,TX,78751,Travis,Needs Review,0.895,0.84,1,https://www.capitalpropertiesrealestate.com/contact/,,Possible official website; page,Identity and address evaluated separately. 1 independent source domain(s) support the selected address. Property-listing candidates were rejected.,2026-07-21T17:19:00Z
 401735-BB,"JBGOODWIN REALTORS, INC.",JAMES B GOODWIN,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:19:09Z
@@ -910,6 +916,100 @@
 9015148-BB,EUTOPYA CORPORATION,,"2090 MARKETPLACE BLVD, IRVING, TX, 75063",IRVING,TX,75063,Dallas,Resolved,0.83,0.0,0,https://www.eutopyarealty.com/properties,,Web page,Address extracted from public source and county returned by U.S. Census geocoder.,2026-07-21T15:28:22Z
 9015152-BB,RIGHT REALTY PROS,,,,,,,Unresolved,0.0,0.0,0,,,,No geocodable public office address found. ,2026-07-21T15:28:16Z
 9016761-BB,TREC TEST REALTY,TREC LICENSING,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:22:20Z
+9016762-BB,"WELLS REALTY GROUP & ASSOCIATES, LLC",GERLISCIA BURRELL WELLS,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:59Z
+9016763-BB,"WRINLYN INVESTMENT GROUP, LLC",ANDREA LYNETTRIC WORMLEY,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:59Z
+9016764-BB,FRANCO URBAN COMMERCIAL LLC,KARINA FRANCO,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:59Z
+9016765-BB,SHAKTI REALTY LLC,RAM MOHAN MADI REDDY,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:59Z
+9016766-BB,NAOS REAL ESTATE,JOHN RYAN CANTU,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:57Z
+9016767-BB,PPC REAL ESTATE LLC,RYAN CRAIG HENNING,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:57Z
+9016768-BB,"MIDWOOD HOLDINGS, LLC",NICHOLAS R FENNEMA,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:57Z
+9016769-BB,TRAILVIEW REALTY CORP,RASHAD AJALOV,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:57Z
+9016770-BB,WILD SPRING DUNES REALTY LLC,ANDREW VAUGHAN WHITACRE,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:54Z
+9016771-BB,CROWN HOMES REAL ESTATE LLC,RENAE ANDERSON,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:54Z
+9016772-BB,AMY ALLISON REALTY GROUP,TERRY LANCE MARKER,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:54Z
+9016773-BB,"ZEUSTRA, LLC",JENNIFER DIANE STEIN,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:54Z
+9016774-BB,WIEBE REAL ESTATE LLC,KARI ELIZABETH WIEBE,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:52Z
+9016776-BB,BRUNNER REAL ESTATE LLC,JOSHUA DAVIS BRUNNER,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:52Z
+9016778-BB,"GAY GUILOTT, BROKER LLC",DEBRA GAY GUILOTT,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:52Z
+9016779-BB,"NATIVE ROSE OF TEXAS, LLC",DANA LILLARD HOWARD,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:52Z
+9016780-BB,"NORTH TEXAN REALTY, LLC",SELVAMANI SIVASANKARAN,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:50Z
+9016781-BB,NEXUS RGV ADMINISTRATIVE GROUP LLC.,DANIELA PEREZ,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:50Z
+9016782-BB,"HTX INVESTING, LLC",DANIEL ENRIQUEZ,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:50Z
+9016783-BB,GRAND SLAM REALTY LLC,CHRISTOPHER JOHN SALINAS,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:50Z
+9016784-BB,PLEXTOWN LLC,MEHDI ISSAZADEH,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:48Z
+9016785-BB,PARDI PROPERTY MANAGEMENT LLC,SRAVANA KUMAR REDDIBATHINI,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:48Z
+9016786-BB,"IHRIG PROPERTIES, LLC",NICHOLAS IHRIG,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:48Z
+9016787-BB,L MITTEL CRE LLC,ELIZABETH A MITTEL,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:47Z
+9016788-BB,PARDI REALTY LLC,SRAVANA KUMAR REDDIBATHINI,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:45Z
+9016789-BB,"SRMC REAL ESTATE, LLC",STEPHANIE RAE MCCOY,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:45Z
+9016790-BB,FORGE COLLECTIVE LLC,HIEN TRUONG,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:45Z
+9016791-BB,SENDERO REFERRAL GROUP LLC,DARBY LYN GRIMES,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:45Z
+9016792-BB,FOX REALTY LLC,RENEE ELIZABETH FOX,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:43Z
+9016793-BB,"KM REALTY MANAGEMENT, LLC",STEVEN STONE,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:43Z
+9016794-BB,FLANAGAN FIRST REALTY LLC,LAWRENCE FLANAGAN,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:43Z
+9016795-BB,TRIPLE L REALTY LLC,JOSHUA RICHARD SMITH,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:43Z
+9016796-BB,MAGNOLIA REAL ESTATE LLC,MICHAEL LAMONT JONES,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:41Z
+9016797-BB,AKARD & CO LLC,MARK ANDREW WOODLING,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:41Z
+9016798-BB,"SCOUT COMMERCIAL, LLC",CHRISTOPHER REZA EBRAHIMI,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:41Z
+9016799-BB,MY PLACE PROPERTY MANAGEMENT DBA MY PLACE REALTY AND DBA MY PLACE RENTALS,ANGELIA DIONNE HAYSLETT,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:41Z
+9016800-BB,"MAROON CREEK COMMERCIAL REAL ESTATE, LLC",BONNIE PFRENGER,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:38Z
+9016801-BB,SBRE GROUP LLC,HARRISON SHARP,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:38Z
+9016802-BB,"MESH MANAGEMENT, LLC",BRENT BUTCHER,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:38Z
+9016803-BB,ALTOS REALTY LLC,CRISTINA M ATHARI,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:38Z
+9016804-BB,METROPOLITAN PROPERTY EXCHANGE LLCC,JONATHAN DAVID WOOD,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:36Z
+9016805-BB,BENTON REAL ESTATE AGENCY LLC,WILLIAM DAVID BENTON,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:36Z
+9016806-BB,"TEXAS TRIANGLE COMMERCIAL REAL ESTATE, LLC",ANTHONY ERROL LAGRED,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:36Z
+9016808-BB,NEST GROUP REAL ESTATE & MORTGAGE CONSULTING INC,LA SHAUN FONTENOT,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:36Z
+9016809-BB,PARTX REALTY LLC,ROBERT EDWARD PARRISH,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:34Z
+9016810-BB,PIER REALTY LLC,TINTO GEEVARGHESE SKARIA,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:34Z
+9016811-BB,"AMD & ASSOCIATES, LLC",ASHLEY MARIE DECASTRO,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:34Z
+9016812-BB,"HOMESHOW REALTY SERVICES, LLC",RODNEY DEAN HENSON,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:34Z
+9016813-BB,COPPER RIDGE REAL ESTATE LLC,LATISHA MARIE PEMBERTON,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:31Z
+9016814-BB,YUM REALTY LLC,TAMMY ANDREA YUM,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:31Z
+9016815-BB,HOUSESIGMA LLC,RODNEY DEAN HENSON,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:31Z
+9016816-BB,"ARIA LUXURY GROUP, LLC",MARIA ALEXIS MONTES,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:31Z
+9016817-BB,MAHONEY ELITE REALTY TEXAS LLC,DERRICK LAMAR MAHONEY,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:29Z
+9016818-BB,ELLIOTT INDUSTRIES LLC,SARITA JOHNSON ELLIOTT,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:29Z
+9016819-BB,TEXAS STYLE REALTY LLC,JOCELYN MILAGROS BRADSHAW,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:29Z
+9016820-BB,"CORE REALTY GROUP, LLC",RODNEY DEAN HENSON,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:29Z
+9016821-BB,DO RENTALS TP LLC,SHEILA CARRIE SMITH OLIVER,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:27Z
+9016822-BB,"OPENKEY HOUSING TX, LLC",MICHAEL CHAD BARTON,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:27Z
+9016823-BB,"LEFTWICH MANAGEMENT, INC.",GEORGE BRENT LEFTWICH,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:27Z
+9016824-BB,RAMOS REALTY GROUP LLC,JUAN MANUEL RAMOS,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:27Z
+9016825-BB,MDJ CONSTRUCTION & DESIGN LLC,MANNY GUTIERREZ,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:24Z
+9016826-BB,RONI REALTY LLC,VIKRAM PASHAM,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:24Z
+9016829-BB,FERGUSON FISHER GROUP,LINDA FERGUSON,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:24Z
+9016830-BB,CTS-TX LLC,JOSHUA POTTS,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:24Z
+9016831-BB,"WESTERN STATES REALTY, LLC",PAMILA R JOHNSON,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:22Z
+9016832-BB,DOTP DWELLVERSE LLC,SHEILA CARRIE SMITH OLIVER,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:22Z
+9016833-BB,"REALPHA REALTY, LLC",DEREK PAUL EISENBERG,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:22Z
+9016834-BB,DFW MULTI FAMILY MANAGEMENT LLC,TERRI A GREEN,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:22Z
+9016835-BB,JODI GREGG PROPERTY GROUP PLLC,JODI ELLEN GREGG,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:20Z
+9016836-BB,APEX PM LLC,JOSE RUBEN ROSAS,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:20Z
+9016838-BB,MINNOKA CORPORATION,NEGUSSIE DESTA,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:20Z
+9016839-BB,MI5 REAL ESTATE LLC,RODNEY DEAN HENSON,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:20Z
+9016840-BB,HOUSTON HOME REALTORS LLC,SHARA HYMOWITZ,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:18Z
+9016841-BB,MAKE IT HAPPEN REAL ESTATE GROUP LLC,NADER MATARI,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:18Z
+9016842-BB,MODR BROKERAGE LLC,FOLORUNSO AKINDOJU,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:18Z
+9016843-BB,"HCR PROPERTY MANAGEMENT, LLC",SHELBY DAWN THOMAS,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:18Z
+9016844-BB,UPPER STYLE REALTY LLC,TEPHANIE ROBINSON,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:15Z
+9016845-BB,NUBUILD HOMES LLC,MEREDITH BLACKWELDER,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:15Z
+9016846-BB,MHN TEXAS LLC,CHARLES GERALD GAFFORD,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:15Z
+9016847-BB,LEGACY POINT REAL ESTATE LLC,REAHIM ABDUL BUDRI,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:15Z
+9016848-BB,REDESTIN ENTERPRISE CORP,YVONNE N VO,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:13Z
+9016849-BB,VIRTUE REAL ESTATE PARTNERS LLC,WORD BELL SHERRILL,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:13Z
+9016850-BB,VILLA DE J REFERRALS LLC,JESSICA MARIE HOLCOMB,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:13Z
+9016851-BB,ASCEND HOMES TX LLC,JACOB SPAIN,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:13Z
+9016852-BB,"BPI COMMERCIAL, LLC",ANDREW ROBERT BURNS,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:11Z
+9016853-BB,THE THAYVER GROUP LLC,VEENA RAJESH,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:11Z
+9016854-BB,"JACOBS RR INTERESTS, LLC",JOSEPH KYLE JACOBS,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:11Z
+9016855-BB,"AMBER HOSPITALITY ADVISORS, INC.",STEPHEN KENDALL POST,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:11Z
+9016856-BB,"ROOTED COLLECTIVE REALTY, LLC",ASHLEY STEVENSON DENT,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:08Z
+9016857-BB,"APS HOLMES GROUP, LLC",RYAN MERRITT PANNELL,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:08Z
+9016858-BB,ACRUX RE LLC,ANTHONY KING GONZALES,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:08Z
+9016859-BB,"PREMIER HOMES AND PROPERTIES REALTY, LLC",WILLIAM GREGORY LOWE,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:08Z
+9016860-BB,SCOGGIN BLUE LLC,STEVEN BRYCE BLUE,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:06Z
+9016861-BB,PARROT PROPERTY MANAGEMENT LLC,MARLON RICARDO PLEITEZ,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:44:06Z
 9016862-BB,THE BLUEPRINT REAL ESTATE CO. LLC,SHARDAY FRAZIER,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:22:19Z
 9016863-BB,W AND PARTNERS LLC,RODNEY DEAN HENSON,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:22:19Z
 9016864-BB,"TEXAS RELOCATION, PROFESSIONALS, LLC.",JOHN R BERRIER,,,,,,Unresolved,0.0,0.0,0,,,,"No candidate passed identity, source, property-page, and geocoding gates.",2026-07-21T17:22:19Z
