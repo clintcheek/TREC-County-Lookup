@@ -1,37 +1,25 @@
-# Texas Broker County Resolver v7
+# Texas Broker County Resolver v7.4
 
-V7 keeps the v6 checkpointing, resume, threading, cache, workbook, Census geocoder, audit, and history infrastructure, while replacing the single-address acceptance engine with county evidence voting.
+V7.4 resolves the brokerage entity and office address before using listing activity.
 
-## What changed
+## Search order
 
-- Evidence is grouped and voted by Texas county.
-- Government and likely official-office sources receive the strongest weight.
-- Independent domains increase confidence; repeated pages from one domain cannot overwhelm the result.
-- Property-listing evidence is down-weighted and cannot independently produce `Verified`.
-- New result tiers: `Verified`, `Very Likely`, `Likely`, `Needs Review`, and `Unresolved`.
-- Existing stronger results are not downgraded during rechecks.
+1. Exact brokerage name + address/contact terms.
+2. Brokerage name + brokerage or individual license number.
+3. Individual broker + brokerage name.
+4. Individual + brokerage listings.
+5. Individual + company + both license numbers on listings.
 
-## Recommended first test
+A confirmed exact-company office address stops the search and becomes the primary county. Property listing addresses are excluded from office-address selection. Listing concentration is used only as the final operating-county fallback.
 
-Run the GitHub Action manually with:
+## Optional Gemini fallback
 
-- mode: `upgrade_version`
-- max_rows: `25`
-- checkpoint_every: `5`
+Set `GEMINI_API_KEY` and change `enable_gemini_fallback` to `true` in `config.json`. Gemini is called only after deterministic company and person/company searches fail to produce a verified office. It uses Google Search grounding and is instructed not to treat property listings as office addresses.
 
-Review `output/brokers_enriched.xlsx`, `state/candidates.csv`, and `state/resolution_history.csv` before increasing the batch size.
+## Recommended validation run
 
-## Required secret
+- Mode: `upgrade_version`
+- Max rows: `25`
+- Checkpoint every: `5`
 
-Create the GitHub Actions repository secret `SERPER_API_KEY`.
-
-## Modes
-
-- `new`
-- `recheck_unresolved`
-- `recheck_review`
-- `upgrade_confidence`
-- `upgrade_version`
-- `recheck_stale`
-- `flagged`
-- `recheck_all`
+Keep the existing `input/`, `state/`, and `output/` data when upgrading.

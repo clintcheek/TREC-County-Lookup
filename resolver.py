@@ -25,8 +25,8 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from rapidfuzz.fuzz import token_set_ratio
 
-RESOLVER_VERSION = "v7.3"
-USER_AGENT = "TexasBrokerCountyResolver/7.3 (private license-location research)"
+RESOLVER_VERSION = "v7.4"
+USER_AGENT = "TexasBrokerCountyResolver/7.4 (private license-location research)"
 ADDRESS_RE = re.compile(
     r"\b(\d{1,6}\s+[A-Za-z0-9.'#&\- ]{2,80}?\s(?:Street|St|Road|Rd|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Lane|Ln|Court|Ct|Parkway|Pkwy|Highway|Hwy|Loop|Way|Trail|Trl|Circle|Cir|Plaza|Place|Pl|Terrace|Ter)\.?"
     r"(?:\s*(?:Suite|Ste|Unit|#)\s*[A-Za-z0-9\-]+)?\s*,?\s*[A-Za-z.'\- ]{2,45},?\s*(?:TX|Texas|[A-Z]{2})\s+\d{5}(?:-\d{4})?)\b",
@@ -250,6 +250,12 @@ def source_profile(url: str) -> tuple[int, str]:
         return 0, "Property listing"
     if host.endswith("trec.texas.gov") or host.endswith("texas.gov"):
         return 5, "Government"
+    # HAR/Realtor office, broker, agent and TREC profile pages are entity profiles,
+    # not property listings, even though the host also carries listings.
+    if host.endswith("har.com") and any(x in path for x in ("/broker_", "/agent_", "/trec_", "/real_estate_brokers", "/office_")):
+        return 4, "Brokerage/agent profile"
+    if host.endswith("realtor.com") and any(x in path for x in ("/realestateagency/", "/realestateagents/")):
+        return 4, "Brokerage/agent profile"
     if is_listing_domain(url):
         return 1, "Listing-site corroboration only"
     if any(x in host for x in ("bbb.org", "chamberofcommerce.com")):
@@ -515,23 +521,102 @@ def confidence_label(score: float, authoritative: bool, independent_domains: int
     return "Unresolved"
 
 
-def build_queries(lic: str, name: str, broker: str) -> list[str]:
-    negative_sites = "-site:zillow.com -site:redfin.com -site:realtor.com -site:homes.com -site:har.com -site:trulia.com -site:loopnet.com -site:crexi.com"
-    queries = [
-        f'"{name}" contact office address Texas {negative_sites}',
-        f'"{name}" (contact OR office OR headquarters OR location) Texas {negative_sites}',
-        f'"{name}" "{lic}" Texas',
-        f'"{name}" "{broker}" Texas' if broker else f'"{name}" broker Texas',
-        f'"{name}" Texas listings',
+def build_query_stages(lic: str, name: str, broker: str, broker_license: str = "") -> list[tuple[str, list[str]]]:
+    """Cheap deterministic entity resolution first; listing inference last."""
+    negative_properties = "-site:zillow.com -site:redfin.com -site:trulia.com -site:loopnet.com -site:crexi.com"
+    stages: list[tuple[str, list[str]]] = [
+        ("exact_company", [
+            f'"{name}" address Texas {negative_properties}',
+            f'"{name}" (office OR contact OR location) Texas {negative_properties}',
+        ]),
+        ("company_license", [
+            f'"{name}" "{lic}" Texas',
+            f'"{name}" "{broker_license}" Texas' if broker_license else f'"{name}" Texas broker license',
+        ]),
     ]
     if broker:
-        queries.append(f'"{broker}" "{name}" (listing OR broker OR realtor) Texas')
-    return queries
+        stages.append(("person_company", [
+            f'"{broker}" "{name}" Texas office address',
+            f'"{broker}" "{name}" (broker OR realtor OR contact) Texas',
+        ]))
+        stages.append(("person_company_listings", [
+            f'"{broker}" "{name}" listing Texas',
+        ]))
+        license_terms = " ".join(x for x in (lic, broker_license) if x)
+        stages.append(("person_license_listings", [
+            f'"{broker}" "{name}" {license_terms} listing Texas',
+        ]))
+    else:
+        stages.append(("company_listings", [f'"{name}" listings Texas']))
+    return stages
 
 
-def resolve_one(lic: str, name: str, broker: str, api_key: str, cfg: dict[str, Any], cache: dict[str, Any], cache_path: Path, audit_path: Path) -> Result:
+def build_queries(lic: str, name: str, broker: str, broker_license: str = "") -> list[str]:
+    return [q for _, queries in build_query_stages(lic, name, broker, broker_license) for q in queries]
+
+
+def exact_company_in_candidate(candidate: Candidate) -> bool:
+    firm = normalized_name(candidate.brokerage_name)
+    hay = re.sub(r"[^a-z0-9 ]", " ", clean(f"{candidate.page_title} {candidate.evidence_text} {candidate.url}").lower())
+    return bool(firm and firm in hay)
+
+
+def is_confirmed_office_candidate(candidate: Candidate) -> bool:
+    if not exact_company_in_candidate(candidate):
+        return False
+    if candidate.negative_score >= 0.45 or any(p in urlparse(candidate.url).path.lower() for p in PROPERTY_PATHS):
+        return False
+    profile_signal = candidate.source_tier >= 4 or is_office_page(candidate.url, candidate.page_title, candidate.evidence_text)
+    return profile_signal and candidate.identity_score >= 0.48
+
+
+def gemini_grounded_address(name: str, lic: str, broker: str, broker_license: str, cfg: dict[str, Any]) -> dict[str, Any] | None:
+    """Optional one-shot Google-grounded resolver for hard company-address cases."""
+    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not api_key or not bool(cfg.get("enable_gemini_fallback", False)):
+        return None
+    model = clean(cfg.get("gemini_model", "gemini-3.5-flash"))
+    prompt = f"""Find the Texas brokerage office or registered business address for this exact entity.
+Company: {name}
+Company license: {lic}
+Related broker: {broker}
+Individual broker license: {broker_license}
+Prefer an official company contact page, HAR/TREC broker profile, regulatory disclosure, or an exact company-name business profile. Do not use a property listing address as the office. Return no address when the entity match is uncertain."""
+    schema = {"type":"object","properties":{
+        "entity_match":{"type":"boolean"},"matched_company_name":{"type":"string"},
+        "office_address":{"type":"string"},"city":{"type":"string"},"state":{"type":"string"},
+        "zip_code":{"type":"string"},"address_type":{"type":"string"},
+        "confidence":{"type":"number"},"source_urls":{"type":"array","items":{"type":"string"}}
+    },"required":["entity_match","matched_company_name","office_address","city","state","zip_code","address_type","confidence","source_urls"]}
+    try:
+        r = session().post(
+            "https://generativelanguage.googleapis.com/v1beta/interactions",
+            headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
+            json={"model": model, "input": prompt, "tools":[{"type":"google_search"},{"type":"url_context"}],
+                  "response_format":{"type":"text","mime_type":"application/json","schema":schema}},
+            timeout=90,
+        )
+        r.raise_for_status()
+        payload = r.json()
+        text = clean(payload.get("output_text"))
+        if not text:
+            for item in payload.get("outputs", []) or payload.get("output", []):
+                if isinstance(item, dict) and item.get("text"):
+                    text = item["text"]; break
+        data = json.loads(text) if text else None
+        if not isinstance(data, dict) or not data.get("entity_match") or float(data.get("confidence") or 0) < 0.72:
+            return None
+        if clean(data.get("address_type")).lower() in {"listing", "property", "property_listing"}:
+            return None
+        return data
+    except Exception as exc:
+        print(f"Gemini fallback skipped: {type(exc).__name__}: {exc}", flush=True)
+        return None
+
+def resolve_one(lic: str, name: str, broker: str, broker_license: str, api_key: str, cfg: dict[str, Any], cache: dict[str, Any], cache_path: Path, audit_path: Path) -> Result:
     delay = float(cfg["request_delay_seconds"])
-    queries = build_queries(lic, name, broker)
+    stages = build_query_stages(lic, name, broker, broker_license)
+    queries = [q for _, qs in stages for q in qs]
     candidates: list[Candidate] = []
     search_errors: list[str] = []
     successful_searches = 0
@@ -539,7 +624,8 @@ def resolve_one(lic: str, name: str, broker: str, api_key: str, cfg: dict[str, A
     page_budget = int(cfg["max_pages_per_record"])
     contact_budget = int(cfg.get("max_contact_pages_per_record", 4))
 
-    for q in queries:
+    def process_query(q: str) -> None:
+        nonlocal successful_searches, page_budget, contact_budget
         try:
             rows = serper_search(q, api_key, delay, cache, cache_path, int(cfg["max_search_results"]))
             successful_searches += 1
@@ -547,31 +633,64 @@ def resolve_one(lic: str, name: str, broker: str, api_key: str, cfg: dict[str, A
             raise
         except Exception as exc:
             search_errors.append(f"{type(exc).__name__}: {exc}")
-            continue
+            return
         for row in rows:
             url, title, snippet = row["link"], row["title"], row["snippet"]
             if not url:
                 continue
             for address in extract_addresses(f"{title} {snippet}"):
                 candidates.append(build_candidate(lic, name, broker, address, url, title, snippet, "search snippet"))
-
             tier, _ = source_profile(url)
             ident = identity_score(name, broker, lic, title, snippet, url)
-            should_fetch = (not is_listing_domain(url) and (is_office_page(url, title, snippet) or tier >= 3) and ident >= 0.30)
+            is_property = any(p in urlparse(url).path.lower() for p in PROPERTY_PATHS)
+            should_fetch = (not is_property and (is_office_page(url, title, snippet) or tier >= 3) and ident >= 0.30)
             if url not in seen_pages and page_budget > 0 and should_fetch:
-                seen_pages.add(url)
-                page_budget -= 1
+                seen_pages.add(url); page_budget -= 1
                 ptitle, ptext, addresses, office_links = fetch_page(url, delay)
                 for address in addresses:
                     candidates.append(build_candidate(lic, name, broker, address, url, ptitle or title, ptext or snippet, "office/business page"))
                 for office_url in office_links:
                     if contact_budget <= 0 or office_url in seen_pages:
                         break
-                    seen_pages.add(office_url)
-                    contact_budget -= 1
+                    seen_pages.add(office_url); contact_budget -= 1
                     ctitle, ctext, caddresses, _ = fetch_page(office_url, delay)
                     for address in caddresses:
                         candidates.append(build_candidate(lic, name, broker, address, office_url, ctitle, ctext, "linked contact/office page"))
+
+    # Run cheap company-first stages and stop as soon as an exact company office is verified.
+    for stage_name, stage_queries in stages:
+        for q in stage_queries:
+            process_query(q)
+        if stage_name in {"exact_company", "company_license", "person_company"}:
+            office_pool = sorted((c for c in candidates if is_confirmed_office_candidate(c)), key=lambda c: c.total_score, reverse=True)
+            for c in office_pool[: int(cfg.get("max_office_geocodes_per_stage", 8))]:
+                if not c.county:
+                    geo = census_geocode(c.address, delay)
+                    if geo and geo.get("county") and geo.get("state", "TX").upper() == "TX":
+                        c.matched_address, c.city, c.state, c.zip_code, c.county = geo["matched_address"], geo["city"], geo["state"], geo["zip_code"], geo["county"]
+                if c.county:
+                    audit_candidates(audit_path, candidates[:40])
+                    source_urls = [x.url for x in office_pool if x.url != c.url and registrable_host(x.url) != registrable_host(c.url)]
+                    secondary = source_urls[0] if source_urls else ""
+                    corroboration = len({registrable_host(x.url) for x in office_pool if x.county == c.county or not x.county})
+                    conf = min(0.99, 0.90 + 0.02 * min(4, corroboration))
+                    return Result(lic, name, broker, c.matched_address, c.city, c.state or "TX", c.zip_code, c.county,
+                                  "Verified", round(conf,3), c.identity_score, max(1, corroboration), c.url, secondary,
+                                  f"Exact company office; {c.source_type}",
+                                  f"Exact company-name office resolution at stage {stage_name}; property listings were excluded from office-address selection.",
+                                  now_utc(), evidence_count=max(1, corroboration))
+        if stage_name == "person_company":
+            ai = gemini_grounded_address(name, lic, broker, broker_license, cfg)
+            if ai:
+                raw = clean(f"{ai.get('office_address')}, {ai.get('city')}, {ai.get('state') or 'TX'} {ai.get('zip_code')}")
+                geo = census_geocode(raw, delay)
+                if geo and geo.get("county"):
+                    urls = [clean(x) for x in ai.get("source_urls", []) if clean(x)]
+                    return Result(lic, name, broker, geo["matched_address"], geo["city"], geo["state"], geo["zip_code"], geo["county"],
+                                  "Verified", min(0.96, float(ai.get("confidence") or 0.8)), 0.9, len({registrable_host(u) for u in urls}) or 1,
+                                  urls[0] if urls else "", urls[1] if len(urls)>1 else "", "Gemini Google-grounded exact company office",
+                                  "Google-grounded AI fallback found an exact company office after deterministic company searches did not produce a usable address; listing addresses were prohibited.",
+                                  now_utc(), evidence_count=max(1,len(urls)))
 
     if successful_searches == 0:
         detail = " | ".join(dict.fromkeys(search_errors))[:1200]
@@ -656,14 +775,14 @@ def resolve_one(lic: str, name: str, broker: str, api_key: str, cfg: dict[str, A
     domains = county_domains[top_county]
     occurrences = county_occurrences[top_county]
     strong_relationships = county_strong_relationships[top_county]
-    authoritative = any(c.source_tier >= 4 and not is_listing_domain(c.url) and c.negative_score < 0.80 for c in group)
+    authoritative = any(c.source_tier >= 4 and c.negative_score < 0.45 for c in group)
     evidence_strength = min(1.0, top_vote / 1.45)
     density_strength = min(1.0, occurrences / 6)
     relationship_strength = min(1.0, strong_relationships / 3)
     confidence = min(0.99, 0.43 * share + 0.22 * evidence_strength + 0.15 * min(1.0, len(domains) / 3) + 0.10 * density_strength + 0.10 * relationship_strength)
     status = confidence_label(confidence, authoritative, len(domains), margin, occurrences, strong_relationships)
 
-    non_listing = [c for c in group if not is_listing_domain(c.url) and c.negative_score < 0.80]
+    non_listing = [c for c in group if c.negative_score < 0.45 and not any(p in urlparse(c.url).path.lower() for p in PROPERTY_PATHS)]
     listing_only = not non_listing
     # Repeated person+firm evidence across independent sites may reach Very Likely,
     # but listing-only evidence still cannot claim a verified office address.
@@ -691,14 +810,15 @@ def resolve_one(lic: str, name: str, broker: str, api_key: str, cfg: dict[str, A
         inference_type + "; " + best.source_type, notes, now_utc(), evidence_count=occurrences,
     )
 
-def find_columns(ws) -> tuple[int, int, int, int | None]:
+def find_columns(ws) -> tuple[int, int, int, int | None, int | None]:
     headers = {clean(c.value).lower(): c.column for c in ws[1]}
     lic = headers.get("license number") or headers.get("license")
     name = headers.get("full name") or headers.get("brokerage") or headers.get("brokerage name")
     broker = headers.get("related license full name") or headers.get("related broker name")
+    broker_license = headers.get("related license number") or headers.get("individual broker number")
     if not lic or not name:
         raise RuntimeError(f"Required columns not found: {list(headers)}")
-    return 1, lic, name, broker
+    return 1, lic, name, broker, broker_license
 
 
 def load_checkpoint(path: Path) -> dict[str, Result]:
@@ -732,7 +852,7 @@ def save_checkpoint(path: Path, results: dict[str, Result]) -> None:
 def write_output(input_file: Path, output_file: Path, checkpoint: dict[str, Result]) -> None:
     wb = load_workbook(input_file)
     ws = wb.active
-    _, lic_col, _, _ = find_columns(ws)
+    _, lic_col, _, _, _ = find_columns(ws)
     headers = ["Office Address", "City", "State", "ZIP", "County", "Resolution Status", "Confidence", "Identity Score", "Consensus Sources", "Evidence Type", "Evidence URL", "Secondary Evidence URL", "Resolution Notes", "Last Updated UTC", "Resolver Version", "Last Checked UTC", "Evidence Count", "Needs Recheck", "Attempt Count"]
     existing = {clean(c.value): c.column for c in ws[1]}
     col = ws.max_column + 1
@@ -865,15 +985,16 @@ def main() -> int:
 
     wb = load_workbook(input_file, read_only=True, data_only=True)
     ws = wb.active
-    _, lic_col, name_col, broker_col = find_columns(ws)
-    pending: list[tuple[str, str, str]] = []
+    _, lic_col, name_col, broker_col, broker_license_col = find_columns(ws)
+    pending: list[tuple[str, str, str, str]] = []
     limit = args.max_rows or int(cfg["max_rows_per_run"])
     for row in ws.iter_rows(min_row=2, values_only=True):
         lic = canonical_license(row[lic_col - 1])
         name = clean(row[name_col - 1])
         broker = clean(row[broker_col - 1]) if broker_col else ""
+        broker_license = canonical_license(row[broker_license_col - 1]) if broker_license_col else ""
         if lic and name and should_process(checkpoint.get(lic), args.mode, cfg):
-            pending.append((lic, name, broker))
+            pending.append((lic, name, broker, broker_license))
             if len(pending) >= limit:
                 break
     wb.close()
@@ -907,10 +1028,10 @@ def main() -> int:
     # Preflight uses the first real query. A successful response is cached and reused,
     # so this does not spend an extra search credit. Fatal account/key failures stop
     # before any record is marked Error or counted as completed.
-    first_lic, first_name, first_broker = pending[0]
+    first_lic, first_name, first_broker, first_broker_license = pending[0]
     try:
         serper_search(
-            build_queries(first_lic, first_name, first_broker)[0],
+            build_queries(first_lic, first_name, first_broker, first_broker_license)[0],
             api_key,
             float(cfg["request_delay_seconds"]),
             cache,
@@ -926,12 +1047,12 @@ def main() -> int:
 
     with ThreadPoolExecutor(max_workers=int(cfg["workers"])) as pool:
         futures = {
-            pool.submit(resolve_one, lic, name, broker, api_key, cfg, cache, cache_path, audit_path): (lic, name, broker)
-            for lic, name, broker in pending
+            pool.submit(resolve_one, lic, name, broker, broker_license, api_key, cfg, cache, cache_path, audit_path): (lic, name, broker, broker_license)
+            for lic, name, broker, broker_license in pending
         }
         try:
             for future in as_completed(futures):
-                lic, name, broker = futures[future]
+                lic, name, broker, broker_license = futures[future]
                 try:
                     result = future.result()
                 except SearchProviderFatalError as exc:
