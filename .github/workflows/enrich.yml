@@ -1,4 +1,4 @@
-name: Enrich Texas Broker Counties v7.3
+name: Enrich Texas Broker Counties v7.4
 
 "on":
   workflow_dispatch:
@@ -34,7 +34,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: texas-broker-enrichment-v7.3
+  group: texas-broker-enrichment-v7.4
   cancel-in-progress: false
 
 jobs:
@@ -69,6 +69,7 @@ jobs:
       - name: Resolve counties with checkpointing
         env:
           SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           MAX_ROWS: ${{ inputs.max_rows || '100' }}
           RUN_MODE: ${{ inputs.mode || 'new' }}
           CHECKPOINT_EVERY: ${{ inputs.checkpoint_every || '25' }}
@@ -96,7 +97,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: texas-brokers-enriched-v7.3-${{ github.run_number }}
+          name: texas-brokers-enriched-v7.4-${{ github.run_number }}
           path: |
             output/**
             state/**
