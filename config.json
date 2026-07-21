@@ -1,9 +1,0 @@
-{
-  "input_file": "input/brokers.xlsx",
-  "output_file": "output/brokers_enriched.xlsx",
-  "checkpoint_file": "state/results.csv",
-  "max_rows_per_run": 500,
-  "workers": 5,
-  "request_delay_seconds": 0.45,
-  "minimum_confidence_to_resolve": 0.72
-}
