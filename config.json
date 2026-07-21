@@ -16,7 +16,7 @@
   "checkpoint_metadata_file": "state/checkpoint.json",
   "checkpoint_every": 25,
   "max_contact_pages_per_record": 4,
-  "resolver_version": "v7.1",
+  "resolver_version": "v7.2",
   "history_file": "state/resolution_history.csv",
   "low_confidence_threshold": 0.9,
   "max_geocodes_per_record": 24

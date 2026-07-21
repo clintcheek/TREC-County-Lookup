@@ -25,8 +25,8 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from rapidfuzz.fuzz import token_set_ratio
 
-RESOLVER_VERSION = "v7.1"
-USER_AGENT = "TexasBrokerCountyResolver/7.1 (private license-location research)"
+RESOLVER_VERSION = "v7.2"
+USER_AGENT = "TexasBrokerCountyResolver/7.2 (private license-location research)"
 ADDRESS_RE = re.compile(
     r"\b(\d{1,6}\s+[A-Za-z0-9.'#&\- ]{2,80}?\s(?:Street|St|Road|Rd|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Lane|Ln|Court|Ct|Parkway|Pkwy|Highway|Hwy|Loop|Way|Trail|Trl|Circle|Cir|Plaza|Place|Pl|Terrace|Ter)\.?"
     r"(?:\s*(?:Suite|Ste|Unit|#)\s*[A-Za-z0-9\-]+)?\s*,?\s*[A-Za-z.'\- ]{2,45},?\s*(?:TX|Texas|[A-Z]{2})\s+\d{5}(?:-\d{4})?)\b",
@@ -50,6 +50,24 @@ CORP_SUFFIXES = {"llc", "lp", "ltd", "inc", "corp", "corporation", "company", "c
 _thread = threading.local()
 _cache_lock = threading.Lock()
 _audit_lock = threading.Lock()
+_provider_fatal = threading.Event()
+_provider_fatal_message = ""
+
+
+class SearchProviderFatalError(RuntimeError):
+    """A non-retryable search-provider failure that must stop the entire run."""
+
+
+def set_provider_fatal(message: str) -> None:
+    global _provider_fatal_message
+    with _cache_lock:
+        if not _provider_fatal.is_set():
+            _provider_fatal_message = clean(message)
+            _provider_fatal.set()
+
+
+def provider_fatal_message() -> str:
+    return _provider_fatal_message or "Search provider is unavailable."
 
 
 def now_utc() -> str:
@@ -309,10 +327,17 @@ def serper_search(query: str, api_key: str, delay: float, cache: dict[str, Any],
     with _cache_lock:
         if key in cache:
             return cache[key]
+    if _provider_fatal.is_set():
+        raise SearchProviderFatalError(provider_fatal_message())
     if not clean(api_key):
-        raise RuntimeError("SERPER_API_KEY is missing or empty")
+        message = "SERPER_API_KEY is missing or empty"
+        set_provider_fatal(message)
+        raise SearchProviderFatalError(message)
+
     last_error = ""
     for attempt in range(3):
+        if _provider_fatal.is_set():
+            raise SearchProviderFatalError(provider_fatal_message())
         time.sleep(delay * (attempt + 1))
         try:
             r = session().post(
@@ -321,9 +346,20 @@ def serper_search(query: str, api_key: str, delay: float, cache: dict[str, Any],
                 json={"q": query, "gl": "us", "hl": "en", "num": max_results},
                 timeout=40,
             )
+            detail = clean(r.text)[:400]
             if r.status_code >= 400:
-                detail = clean(r.text)[:240]
-                raise RuntimeError(f"Serper HTTP {r.status_code}: {detail}")
+                lower = detail.lower()
+                fatal = (
+                    r.status_code in {401, 402, 403}
+                    or "not enough credits" in lower
+                    or "insufficient credit" in lower
+                    or "invalid api key" in lower
+                )
+                message = f"Serper HTTP {r.status_code}: {detail}"
+                if fatal:
+                    set_provider_fatal(message)
+                    raise SearchProviderFatalError(message)
+                raise RuntimeError(message)
             payload = r.json()
             rows = [{
                 "title": clean(i.get("title")), "link": clean(i.get("link")), "snippet": clean(i.get("snippet"))
@@ -331,10 +367,12 @@ def serper_search(query: str, api_key: str, delay: float, cache: dict[str, Any],
             with _cache_lock:
                 cache[key] = rows
             return rows
+        except SearchProviderFatalError:
+            raise
         except Exception as exc:
             last_error = f"{type(exc).__name__}: {exc}"
-            if "HTTP 401" in last_error or "HTTP 403" in last_error:
-                break
+            if attempt < 2:
+                continue
     raise RuntimeError(last_error or "Unknown Serper search failure")
 
 
@@ -451,16 +489,20 @@ def confidence_label(score: float, authoritative: bool, independent_domains: int
     return "Unresolved"
 
 
-def resolve_one(lic: str, name: str, broker: str, api_key: str, cfg: dict[str, Any], cache: dict[str, Any], cache_path: Path, audit_path: Path) -> Result:
-    delay = float(cfg["request_delay_seconds"])
+def build_queries(lic: str, name: str, broker: str) -> list[str]:
     negative_sites = "-site:zillow.com -site:redfin.com -site:realtor.com -site:homes.com -site:har.com -site:trulia.com -site:loopnet.com -site:crexi.com"
-    queries = [
+    return [
         f'"{name}" contact office address Texas {negative_sites}',
         f'"{name}" (contact OR office OR headquarters OR location) Texas {negative_sites}',
         f'"{name}" "{lic}" Texas {negative_sites}',
         f'"{name}" "{broker}" Texas address' if broker else f'"{name}" broker Texas address',
         f'"{name}" Texas listings',
     ]
+
+
+def resolve_one(lic: str, name: str, broker: str, api_key: str, cfg: dict[str, Any], cache: dict[str, Any], cache_path: Path, audit_path: Path) -> Result:
+    delay = float(cfg["request_delay_seconds"])
+    queries = build_queries(lic, name, broker)
     candidates: list[Candidate] = []
     search_errors: list[str] = []
     successful_searches = 0
@@ -472,6 +514,8 @@ def resolve_one(lic: str, name: str, broker: str, api_key: str, cfg: dict[str, A
         try:
             rows = serper_search(q, api_key, delay, cache, cache_path, int(cfg["max_search_results"]))
             successful_searches += 1
+        except SearchProviderFatalError:
+            raise
         except Exception as exc:
             search_errors.append(f"{type(exc).__name__}: {exc}")
             continue
@@ -664,9 +708,9 @@ def write_output(input_file: Path, output_file: Path, checkpoint: dict[str, Resu
     temp_output.replace(output_file)
 
 
-def version_number(value: str) -> int:
-    m = re.search(r"(\d+)", clean(value))
-    return int(m.group(1)) if m else 0
+def version_tuple(value: str) -> tuple[int, ...]:
+    numbers = tuple(int(x) for x in re.findall(r"\d+", clean(value)))
+    return numbers or (0,)
 
 
 def age_days(timestamp: str) -> int:
@@ -689,11 +733,14 @@ def should_process(old: Result | None, mode: str, cfg: dict[str, Any]) -> bool:
     if mode == "upgrade_confidence":
         return old.confidence < threshold or old.status != "Verified"
     if mode == "upgrade_version":
-        return version_number(old.resolver_version) < version_number(RESOLVER_VERSION)
+        return version_tuple(old.resolver_version) < version_tuple(RESOLVER_VERSION)
     if mode == "recheck_stale":
         return age_days(old.last_checked or old.updated_at) >= stale_days
     if mode == "flagged":
         return clean(old.needs_recheck).lower() in {"yes", "true", "1"}
+    if mode == "new" and old.status == "Error":
+        note = old.notes.lower()
+        return any(term in note for term in ("search provider", "serper", "api_key", "credits"))
     return False
 
 
@@ -802,6 +849,26 @@ def main() -> int:
         print("No eligible records remain for this mode.", flush=True)
         return 0
 
+    # Preflight uses the first real query. A successful response is cached and reused,
+    # so this does not spend an extra search credit. Fatal account/key failures stop
+    # before any record is marked Error or counted as completed.
+    first_lic, first_name, first_broker = pending[0]
+    try:
+        serper_search(
+            build_queries(first_lic, first_name, first_broker)[0],
+            api_key,
+            float(cfg["request_delay_seconds"]),
+            cache,
+            cache_path,
+            int(cfg["max_search_results"]),
+        )
+    except SearchProviderFatalError as exc:
+        print(f"::error::Search-provider preflight failed: {exc}", flush=True)
+        print("No broker records were changed. Add Serper credits or correct the API key, then rerun.", flush=True)
+        return 2
+    except Exception as exc:
+        print(f"Search-provider preflight encountered a transient error; normal retry logic will continue: {type(exc).__name__}: {exc}", flush=True)
+
     with ThreadPoolExecutor(max_workers=int(cfg["workers"])) as pool:
         futures = {
             pool.submit(resolve_one, lic, name, broker, api_key, cfg, cache, cache_path, audit_path): (lic, name, broker)
@@ -812,6 +879,13 @@ def main() -> int:
                 lic, name, broker = futures[future]
                 try:
                     result = future.result()
+                except SearchProviderFatalError as exc:
+                    set_provider_fatal(str(exc))
+                    print(f"::error::Fatal search-provider failure: {exc}", flush=True)
+                    interrupted = True
+                    for pending_future in futures:
+                        pending_future.cancel()
+                    break
                 except Exception as exc:
                     result = Result(
                         lic,
@@ -849,6 +923,8 @@ def main() -> int:
     for result in checkpoint.values():
         counts[result.status] += 1
     print("Done:", dict(counts), flush=True)
+    if _provider_fatal.is_set():
+        return 2
     return 130 if interrupted else 0
 
 if __name__ == "__main__":
