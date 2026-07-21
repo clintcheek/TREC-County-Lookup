@@ -1,12 +1,12 @@
 {
-  "last_saved_utc": "2026-07-21T18:55:27Z",
-  "completed_this_run": 100,
-  "planned_this_run": 100,
-  "total_checkpointed_records": 2435,
+  "last_saved_utc": "2026-07-21T20:17:32Z",
+  "completed_this_run": 50,
+  "planned_this_run": 50,
+  "total_checkpointed_records": 2485,
   "mode": "new",
-  "resolver_version": "v6",
+  "resolver_version": "v7",
   "status_counts": {
-    "Unresolved": 2139,
+    "Unresolved": 2189,
     "Needs Review": 178,
     "Verified": 115,
     "Resolved": 3
