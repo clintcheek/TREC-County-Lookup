@@ -25,7 +25,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from rapidfuzz.fuzz import token_set_ratio
 
-RESOLVER_VERSION = "v7.5"
+RESOLVER_VERSION = "v7.6"
 USER_AGENT = "TexasBrokerCountyResolver/7.5 (private license-location research)"
 ADDRESS_RE = re.compile(
     r"\b(\d{1,6}\s+[A-Za-z0-9.'#&\- ]{2,80}?\s(?:Street|St|Road|Rd|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Lane|Ln|Court|Ct|Parkway|Pkwy|Highway|Hwy|Loop|Way|Trail|Trl|Circle|Cir|Plaza|Place|Pl|Terrace|Ter)\.?"
@@ -987,7 +987,34 @@ def age_days(timestamp: str) -> int:
         return 999999
 
 
-def should_process(old: Result | None, mode: str, cfg: dict[str, Any]) -> bool:
+def parallel_queue_for(old: Result | None, related_broker: str) -> str:
+    """Assign each record to exactly one of the five v7.6 queues.
+
+    Priority prevents duplicate work when a record qualifies for several queues.
+    """
+    if old is None:
+        return "new"
+    state = clean(old.state).upper()
+    county = clean(old.county)
+    status = clean(old.status)
+    needs_recheck = clean(old.needs_recheck).lower() in {"yes", "true", "1"}
+
+    # A company with an associated/related broker but still no county is the
+    # most actionable repair queue after genuinely new records.
+    if clean(related_broker) and not county:
+        return "broker_no_county"
+    if state and state not in {"TX", "TEXAS"}:
+        return "out_of_state"
+    if status in {"Unresolved", "Error"}:
+        return "unresolved"
+    if status in {"Very Likely", "Likely", "Needs Review"} or needs_recheck:
+        return "review"
+    return ""
+
+
+def should_process(old: Result | None, mode: str, cfg: dict[str, Any], related_broker: str = "") -> bool:
+    if mode == "parallel_5":
+        return bool(parallel_queue_for(old, related_broker))
     if old is None:
         return True
     threshold = float(cfg.get("low_confidence_threshold", 0.90))
@@ -1053,7 +1080,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="config.json")
     ap.add_argument("--max-rows", type=int)
-    ap.add_argument("--mode", choices=["new", "recheck_review", "recheck_unresolved", "upgrade_confidence", "upgrade_version", "recheck_stale", "flagged", "recheck_all"], default="new")
+    ap.add_argument("--mode", choices=["parallel_5", "new", "recheck_review", "recheck_unresolved", "upgrade_confidence", "upgrade_version", "recheck_stale", "flagged", "recheck_all"], default="parallel_5")
+    ap.add_argument("--workers", type=int, default=None, help="Concurrent resolver workers; v7.6 defaults to 5.")
     ap.add_argument("--checkpoint-every", type=int, default=None)
     args = ap.parse_args()
 
@@ -1078,14 +1106,18 @@ def main() -> int:
     ws = wb.active
     _, lic_col, name_col, broker_col, broker_license_col = find_columns(ws)
     pending: list[tuple[str, str, str, str]] = []
+    queue_counts: dict[str, int] = defaultdict(int)
     limit = args.max_rows or int(cfg["max_rows_per_run"])
     for row in ws.iter_rows(min_row=2, values_only=True):
         lic = canonical_license(row[lic_col - 1])
         name = clean(row[name_col - 1])
         broker = clean(row[broker_col - 1]) if broker_col else ""
         broker_license = canonical_license(row[broker_license_col - 1]) if broker_license_col else ""
-        if lic and name and should_process(checkpoint.get(lic), args.mode, cfg):
+        old = checkpoint.get(lic)
+        if lic and name and should_process(old, args.mode, cfg, broker):
             pending.append((lic, name, broker, broker_license))
+            if args.mode == "parallel_5":
+                queue_counts[parallel_queue_for(old, broker)] += 1
             if len(pending) >= limit:
                 break
     wb.close()
@@ -1102,10 +1134,14 @@ def main() -> int:
     signal.signal(signal.SIGTERM, handle_stop)
     signal.signal(signal.SIGINT, handle_stop)
 
+    worker_count = max(1, args.workers or int(cfg.get("workers", 5)))
     print(
-        f"Checkpoint contains {len(checkpoint)} records; mode={args.mode}; processing={planned}; save interval={checkpoint_every}.",
+        f"Checkpoint contains {len(checkpoint)} records; mode={args.mode}; processing={planned}; "
+        f"workers={worker_count}; save interval={checkpoint_every}.",
         flush=True,
     )
+    if args.mode == "parallel_5":
+        print(f"v7.6 queue plan: {dict(queue_counts)}", flush=True)
 
     # Create a valid recovery workbook and metadata even when there is nothing new to process.
     if not pending:
@@ -1136,7 +1172,7 @@ def main() -> int:
     except Exception as exc:
         print(f"Search-provider preflight encountered a transient error; normal retry logic will continue: {type(exc).__name__}: {exc}", flush=True)
 
-    with ThreadPoolExecutor(max_workers=int(cfg["workers"])) as pool:
+    with ThreadPoolExecutor(max_workers=worker_count) as pool:
         futures = {
             pool.submit(resolve_one, lic, name, broker, broker_license, api_key, cfg, cache, cache_path, audit_path): (lic, name, broker, broker_license)
             for lic, name, broker, broker_license in pending
