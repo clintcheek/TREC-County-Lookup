@@ -1,20 +1,20 @@
-name: Enrich Texas Broker Counties v7.6 - Five Parallel Workers
+name: Enrich Texas Broker Counties v7.7 - Dynamic Workers
 
 "on":
   workflow_dispatch:
     inputs:
       max_rows:
-        description: Total records to process across all five queues
+        description: Maximum eligible records to process in this run
         required: true
-        default: "500"
+        default: "100"
         type: string
       mode:
         description: Processing mode
         required: true
-        default: parallel_5
+        default: parallel_15
         type: choice
         options:
-          - parallel_5
+          - parallel_15
           - new
           - recheck_unresolved
           - recheck_review
@@ -23,6 +23,11 @@ name: Enrich Texas Broker Counties v7.6 - Five Parallel Workers
           - recheck_stale
           - flagged
           - recheck_all
+      workers:
+        description: Dynamic worker count (15 recommended)
+        required: true
+        default: "15"
+        type: string
       checkpoint_every:
         description: Save workbook and state after this many completed records
         required: true
@@ -34,14 +39,12 @@ name: Enrich Texas Broker Counties v7.6 - Five Parallel Workers
 permissions:
   contents: write
 
-# Only one complete enrichment run writes the shared workbook/state at a time.
-# Inside that run, resolver.py operates five records concurrently.
 concurrency:
-  group: texas-broker-enrichment-v7.6
+  group: texas-broker-enrichment-v7.7
   cancel-in-progress: false
 
 jobs:
-  enrich-five-parallel:
+  enrich:
     runs-on: ubuntu-latest
     timeout-minutes: 350
 
@@ -68,19 +71,21 @@ jobs:
           test -f config.json
           test -f input/brokers.xlsx
           mkdir -p output state
+          python -m py_compile resolver.py
 
-      - name: Run five parallel resolver workers
+      - name: Run dynamic resolver workers
         env:
           SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          MAX_ROWS: ${{ inputs.max_rows || '500' }}
-          RUN_MODE: ${{ inputs.mode || 'parallel_5' }}
+          MAX_ROWS: ${{ inputs.max_rows || '100' }}
+          RUN_MODE: ${{ inputs.mode || 'parallel_15' }}
+          WORKERS: ${{ inputs.workers || '15' }}
           CHECKPOINT_EVERY: ${{ inputs.checkpoint_every || '25' }}
         run: |
           python resolver.py \
             --max-rows "$MAX_ROWS" \
             --mode "$RUN_MODE" \
-            --workers 5 \
+            --workers "$WORKERS" \
             --checkpoint-every "$CHECKPOINT_EVERY"
 
       - name: Save progress to repository
@@ -92,7 +97,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "No progress changes to commit"
           else
-            git commit -m "Save v7.6 five-worker enrichment checkpoint"
+            git commit -m "Save v7.7 enrichment checkpoint"
             git pull --rebase
             git push
           fi
@@ -101,7 +106,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: texas-brokers-enriched-v7.6-${{ github.run_number }}
+          name: texas-brokers-enriched-v7.7-${{ github.run_number }}
           path: |
             output/**
             state/**
