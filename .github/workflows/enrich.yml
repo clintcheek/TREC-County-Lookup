@@ -1,19 +1,20 @@
-name: Enrich Texas Broker Counties v7.5
+name: Enrich Texas Broker Counties v7.6 - Five Parallel Workers
 
 "on":
   workflow_dispatch:
     inputs:
       max_rows:
-        description: Records to process in this run
+        description: Total records to process across all five queues
         required: true
-        default: "100"
+        default: "500"
         type: string
       mode:
         description: Processing mode
         required: true
-        default: new
+        default: parallel_5
         type: choice
         options:
+          - parallel_5
           - new
           - recheck_unresolved
           - recheck_review
@@ -33,12 +34,14 @@ name: Enrich Texas Broker Counties v7.5
 permissions:
   contents: write
 
+# Only one complete enrichment run writes the shared workbook/state at a time.
+# Inside that run, resolver.py operates five records concurrently.
 concurrency:
-  group: texas-broker-enrichment-v7.5
+  group: texas-broker-enrichment-v7.6
   cancel-in-progress: false
 
 jobs:
-  enrich:
+  enrich-five-parallel:
     runs-on: ubuntu-latest
     timeout-minutes: 350
 
@@ -66,17 +69,18 @@ jobs:
           test -f input/brokers.xlsx
           mkdir -p output state
 
-      - name: Resolve counties with checkpointing
+      - name: Run five parallel resolver workers
         env:
           SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          MAX_ROWS: ${{ inputs.max_rows || '100' }}
-          RUN_MODE: ${{ inputs.mode || 'new' }}
+          MAX_ROWS: ${{ inputs.max_rows || '500' }}
+          RUN_MODE: ${{ inputs.mode || 'parallel_5' }}
           CHECKPOINT_EVERY: ${{ inputs.checkpoint_every || '25' }}
         run: |
           python resolver.py \
             --max-rows "$MAX_ROWS" \
             --mode "$RUN_MODE" \
+            --workers 5 \
             --checkpoint-every "$CHECKPOINT_EVERY"
 
       - name: Save progress to repository
@@ -88,7 +92,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "No progress changes to commit"
           else
-            git commit -m "Save broker enrichment checkpoint"
+            git commit -m "Save v7.6 five-worker enrichment checkpoint"
             git pull --rebase
             git push
           fi
@@ -97,7 +101,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: texas-brokers-enriched-v7.5-${{ github.run_number }}
+          name: texas-brokers-enriched-v7.6-${{ github.run_number }}
           path: |
             output/**
             state/**
