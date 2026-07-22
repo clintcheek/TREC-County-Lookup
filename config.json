@@ -16,11 +16,12 @@
   "checkpoint_metadata_file": "state/checkpoint.json",
   "checkpoint_every": 25,
   "max_contact_pages_per_record": 4,
-  "resolver_version": "v7.4",
+  "resolver_version": "v7.5",
   "history_file": "state/resolution_history.csv",
   "low_confidence_threshold": 0.76,
   "max_geocodes_per_record": 24,
   "max_office_geocodes_per_stage": 8,
   "enable_gemini_fallback": false,
-  "gemini_model": "gemini-3.5-flash"
+  "gemini_model": "gemini-3.5-flash",
+  "create_clean_results_sheet": true
 }

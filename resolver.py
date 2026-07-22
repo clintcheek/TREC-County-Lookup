@@ -25,14 +25,15 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from rapidfuzz.fuzz import token_set_ratio
 
-RESOLVER_VERSION = "v7.4"
-USER_AGENT = "TexasBrokerCountyResolver/7.4 (private license-location research)"
+RESOLVER_VERSION = "v7.5"
+USER_AGENT = "TexasBrokerCountyResolver/7.5 (private license-location research)"
 ADDRESS_RE = re.compile(
     r"\b(\d{1,6}\s+[A-Za-z0-9.'#&\- ]{2,80}?\s(?:Street|St|Road|Rd|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Lane|Ln|Court|Ct|Parkway|Pkwy|Highway|Hwy|Loop|Way|Trail|Trl|Circle|Cir|Plaza|Place|Pl|Terrace|Ter)\.?"
     r"(?:\s*(?:Suite|Ste|Unit|#)\s*[A-Za-z0-9\-]+)?\s*,?\s*[A-Za-z.'\- ]{2,45},?\s*(?:TX|Texas|[A-Z]{2})\s+\d{5}(?:-\d{4})?)\b",
     re.I,
 )
 ZIP_RE = re.compile(r"\b\d{5}(?:-\d{4})?\b")
+PHONE_RE = re.compile(r"(?<!\d)(?:\+?1[ .\-]?)?(?:\(\d{3}\)|\d{3})[ .\-]\d{3}[ .\-]\d{4}(?!\d)")
 LOOSE_ADDRESS_RE = re.compile(
     r"\b(\d{1,6}\s+[A-Za-z0-9.'#&/\- ]{2,100}?,\s*[A-Za-z.'\- ]{2,45},?\s*(?:TX|Texas)\s+\d{5}(?:-\d{4})?)\b",
     re.I,
@@ -156,6 +157,8 @@ class Result:
     evidence_count: int = 0
     needs_recheck: str = "Yes"
     attempt_count: int = 1
+    brokerage_website: str = ""
+    office_phone: str = ""
 
 
 
@@ -179,10 +182,16 @@ def choose_result(previous: Result | None, current: Result, force_replace: bool 
         return current
     # Never downgrade a previously stronger answer. A new result replaces the old one
     # only when status improves, confidence improves materially, or evidence increases.
+    enrichment_added = (
+        (not previous.brokerage_website and bool(current.brokerage_website))
+        or (not previous.office_phone and bool(current.office_phone))
+        or (not previous.evidence_url and bool(current.evidence_url))
+    )
     better = (
         status_rank(current.status) > status_rank(previous.status)
         or (status_rank(current.status) == status_rank(previous.status) and current.confidence > previous.confidence + 0.01)
         or (current.county == previous.county and current.evidence_count > previous.evidence_count and current.confidence >= previous.confidence - 0.02)
+        or (current.county == previous.county and enrichment_added and current.confidence >= previous.confidence - 0.05)
     )
     if better:
         return current
@@ -235,6 +244,33 @@ def registrable_host(url: str) -> str:
 def is_listing_domain(url: str) -> bool:
     host = registrable_host(url)
     return any(host == d or host.endswith("." + d) for d in LISTING_DOMAINS)
+
+
+NON_OFFICIAL_HOSTS = {
+    "google.com", "facebook.com", "instagram.com", "linkedin.com", "x.com", "twitter.com",
+    "yelp.com", "mapquest.com", "bbb.org", "bizapedia.com", "chamberofcommerce.com",
+    "trec.texas.gov", "texas.gov", "har.com", "realtor.com", "zillow.com", "redfin.com",
+    "homes.com", "trulia.com", "loopnet.com", "crexi.com", "youtube.com", "youtu.be",
+}
+
+def is_probable_official_website(url: str) -> bool:
+    host = registrable_host(url)
+    if not host or not url.lower().startswith(("http://", "https://")):
+        return False
+    return not any(host == d or host.endswith("." + d) for d in NON_OFFICIAL_HOSTS)
+
+def extract_phones(text: str) -> list[str]:
+    found: list[str] = []
+    for raw in PHONE_RE.findall(clean(text)):
+        digits = re.sub(r"\D", "", raw)
+        if len(digits) == 11 and digits.startswith("1"):
+            digits = digits[1:]
+        if len(digits) != 10 or digits.startswith(("000", "555")):
+            continue
+        formatted = f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
+        if formatted not in found:
+            found.append(formatted)
+    return found
 
 
 def is_office_page(url: str, title: str = "", snippet: str = "") -> bool:
@@ -382,23 +418,28 @@ def serper_search(query: str, api_key: str, delay: float, cache: dict[str, Any],
     raise RuntimeError(last_error or "Unknown Serper search failure")
 
 
-def fetch_page(url: str, delay: float) -> tuple[str, str, list[str], list[str]]:
+def fetch_page(url: str, delay: float) -> tuple[str, str, list[str], list[str], list[str], list[str]]:
     try:
         time.sleep(delay)
         r = session().get(url, timeout=30, allow_redirects=True)
         if r.status_code >= 400 or "text/html" not in r.headers.get("content-type", ""):
-            return "", "", [], []
+            return "", "", [], [], [], []
         soup = BeautifulSoup(r.text[:2_000_000], "lxml")
         title = clean(soup.title.get_text(" ", strip=True) if soup.title else "")
         text = clean(soup.get_text(" ", strip=True))[:120000]
         addresses: list[str] = []
         office_links: list[str] = []
+        external_links: list[str] = []
+        phones: list[str] = []
         base_host = registrable_host(r.url)
         for a in soup.find_all("a", href=True):
             label = clean(a.get_text(" ", strip=True)).lower()
             href = clean(a.get("href"))
             absolute = urljoin(r.url, href)
-            if registrable_host(absolute) != base_host:
+            linked_host = registrable_host(absolute)
+            if linked_host != base_host:
+                if is_probable_official_website(absolute) and absolute not in external_links:
+                    external_links.append(absolute)
                 continue
             path = urlparse(absolute).path.lower()
             if any(term in label or term in path for term in OFFICE_PATH_TERMS):
@@ -421,9 +462,12 @@ def fetch_page(url: str, delay: float) -> tuple[str, str, list[str], list[str]]:
             except Exception:
                 pass
         addresses.extend(extract_addresses(text))
-        return title, text, list(dict.fromkeys(addresses))[:15], office_links[:8]
+        phones.extend(extract_phones(text))
+        for tel in soup.select("a[href^=\"tel:\"]"):
+            phones.extend(extract_phones(clean(tel.get("href", ""))[4:]))
+        return title, text, list(dict.fromkeys(addresses))[:15], office_links[:8], list(dict.fromkeys(phones))[:5], external_links[:10]
     except Exception:
-        return "", "", [], []
+        return "", "", [], [], [], []
 
 
 def census_geocode(address: str, delay: float) -> dict[str, str] | None:
@@ -623,6 +667,16 @@ def resolve_one(lic: str, name: str, broker: str, broker_license: str, api_key: 
     seen_pages: set[str] = set()
     page_budget = int(cfg["max_pages_per_record"])
     contact_budget = int(cfg.get("max_contact_pages_per_record", 4))
+    discovered_websites: list[str] = []
+    discovered_phones: list[str] = []
+
+    def remember_contact(urls: list[str] | None = None, phones: list[str] | None = None) -> None:
+        for website in urls or []:
+            if is_probable_official_website(website) and website not in discovered_websites:
+                discovered_websites.append(website)
+        for phone in phones or []:
+            if phone and phone not in discovered_phones:
+                discovered_phones.append(phone)
 
     def process_query(q: str) -> None:
         nonlocal successful_searches, page_budget, contact_budget
@@ -638,6 +692,7 @@ def resolve_one(lic: str, name: str, broker: str, broker_license: str, api_key: 
             url, title, snippet = row["link"], row["title"], row["snippet"]
             if not url:
                 continue
+            remember_contact([url], extract_phones(f"{title} {snippet}"))
             for address in extract_addresses(f"{title} {snippet}"):
                 candidates.append(build_candidate(lic, name, broker, address, url, title, snippet, "search snippet"))
             tier, _ = source_profile(url)
@@ -646,14 +701,16 @@ def resolve_one(lic: str, name: str, broker: str, broker_license: str, api_key: 
             should_fetch = (not is_property and (is_office_page(url, title, snippet) or tier >= 3) and ident >= 0.30)
             if url not in seen_pages and page_budget > 0 and should_fetch:
                 seen_pages.add(url); page_budget -= 1
-                ptitle, ptext, addresses, office_links = fetch_page(url, delay)
+                ptitle, ptext, addresses, office_links, page_phones, external_links = fetch_page(url, delay)
+                remember_contact(external_links + ([url] if is_probable_official_website(url) else []), page_phones)
                 for address in addresses:
                     candidates.append(build_candidate(lic, name, broker, address, url, ptitle or title, ptext or snippet, "office/business page"))
                 for office_url in office_links:
                     if contact_budget <= 0 or office_url in seen_pages:
                         break
                     seen_pages.add(office_url); contact_budget -= 1
-                    ctitle, ctext, caddresses, _ = fetch_page(office_url, delay)
+                    ctitle, ctext, caddresses, _, contact_phones, contact_external = fetch_page(office_url, delay)
+                    remember_contact(contact_external + ([office_url] if is_probable_official_website(office_url) else []), contact_phones)
                     for address in caddresses:
                         candidates.append(build_candidate(lic, name, broker, address, office_url, ctitle, ctext, "linked contact/office page"))
 
@@ -678,7 +735,9 @@ def resolve_one(lic: str, name: str, broker: str, broker_license: str, api_key: 
                                   "Verified", round(conf,3), c.identity_score, max(1, corroboration), c.url, secondary,
                                   f"Exact company office; {c.source_type}",
                                   f"Exact company-name office resolution at stage {stage_name}; property listings were excluded from office-address selection.",
-                                  now_utc(), evidence_count=max(1, corroboration))
+                                  now_utc(), evidence_count=max(1, corroboration),
+                                  brokerage_website=(c.url if is_probable_official_website(c.url) else (discovered_websites[0] if discovered_websites else "")),
+                                  office_phone=(discovered_phones[0] if discovered_phones else ""))
         if stage_name == "person_company":
             ai = gemini_grounded_address(name, lic, broker, broker_license, cfg)
             if ai:
@@ -690,7 +749,9 @@ def resolve_one(lic: str, name: str, broker: str, broker_license: str, api_key: 
                                   "Verified", min(0.96, float(ai.get("confidence") or 0.8)), 0.9, len({registrable_host(u) for u in urls}) or 1,
                                   urls[0] if urls else "", urls[1] if len(urls)>1 else "", "Gemini Google-grounded exact company office",
                                   "Google-grounded AI fallback found an exact company office after deterministic company searches did not produce a usable address; listing addresses were prohibited.",
-                                  now_utc(), evidence_count=max(1,len(urls)))
+                                  now_utc(), evidence_count=max(1,len(urls)),
+                                  brokerage_website=next((u for u in urls if is_probable_official_website(u)), discovered_websites[0] if discovered_websites else ""),
+                                  office_phone=(discovered_phones[0] if discovered_phones else ""))
 
     if successful_searches == 0:
         detail = " | ".join(dict.fromkeys(search_errors))[:1200]
@@ -808,6 +869,8 @@ def resolve_one(lic: str, name: str, broker: str, broker_license: str, api_key: 
         lic, name, broker, office_address, city, state, zip_code, county,
         status, round(confidence, 3), best.identity_score, len(domains), best.url, secondary,
         inference_type + "; " + best.source_type, notes, now_utc(), evidence_count=occurrences,
+        brokerage_website=(best.url if is_probable_official_website(best.url) else (discovered_websites[0] if discovered_websites else "")),
+        office_phone=(discovered_phones[0] if discovered_phones else ""),
     )
 
 def find_columns(ws) -> tuple[int, int, int, int | None, int | None]:
@@ -853,13 +916,14 @@ def write_output(input_file: Path, output_file: Path, checkpoint: dict[str, Resu
     wb = load_workbook(input_file)
     ws = wb.active
     _, lic_col, _, _, _ = find_columns(ws)
-    headers = ["Office Address", "City", "State", "ZIP", "County", "Resolution Status", "Confidence", "Identity Score", "Consensus Sources", "Evidence Type", "Evidence URL", "Secondary Evidence URL", "Resolution Notes", "Last Updated UTC", "Resolver Version", "Last Checked UTC", "Evidence Count", "Needs Recheck", "Attempt Count"]
+    headers = ["Brokerage Website", "Office Phone", "Office Address", "City", "State", "ZIP", "County", "Resolution Status", "Confidence", "Identity Score", "Consensus Sources", "Evidence Type", "Evidence URL", "Secondary Evidence URL", "Resolution Notes", "Last Updated UTC", "Resolver Version", "Last Checked UTC", "Evidence Count", "Needs Recheck", "Attempt Count"]
     existing = {clean(c.value): c.column for c in ws[1]}
     col = ws.max_column + 1
     for h in headers:
         if h not in existing:
             ws.cell(1, col, h); existing[h] = col; col += 1
     mapping = {
+        "Brokerage Website":"brokerage_website", "Office Phone":"office_phone",
         "Office Address":"office_address", "City":"city", "State":"state", "ZIP":"zip_code", "County":"county",
         "Resolution Status":"status", "Confidence":"confidence", "Identity Score":"identity_score",
         "Consensus Sources":"consensus_sources", "Evidence Type":"evidence_type", "Evidence URL":"evidence_url",
@@ -874,9 +938,36 @@ def write_output(input_file: Path, output_file: Path, checkpoint: dict[str, Resu
     fill = PatternFill("solid", fgColor="1F4E78")
     for c in ws[1]:
         c.font = Font(bold=True, color="FFFFFF"); c.fill = fill; c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    widths = {"Office Address":38,"City":18,"State":9,"ZIP":12,"County":18,"Resolution Status":18,"Confidence":12,"Identity Score":14,"Consensus Sources":18,"Evidence Type":26,"Evidence URL":52,"Secondary Evidence URL":52,"Resolution Notes":55,"Last Updated UTC":22,"Resolver Version":16,"Last Checked UTC":22,"Evidence Count":15,"Needs Recheck":15,"Attempt Count":14}
+    widths = {"Brokerage Website":42,"Office Phone":18,"Office Address":38,"City":18,"State":9,"ZIP":12,"County":18,"Resolution Status":18,"Confidence":12,"Identity Score":14,"Consensus Sources":18,"Evidence Type":26,"Evidence URL":52,"Secondary Evidence URL":52,"Resolution Notes":55,"Last Updated UTC":22,"Resolver Version":16,"Last Checked UTC":22,"Evidence Count":15,"Needs Recheck":15,"Attempt Count":14}
     for h, width in widths.items(): ws.column_dimensions[get_column_letter(existing[h])].width = width
     ws.freeze_panes = "A2"; ws.auto_filter.ref = ws.dimensions
+
+    # A concise, ready-to-use directory with only the fields requested for business use.
+    if "Clean Results" in wb.sheetnames:
+        del wb["Clean Results"]
+    clean_ws = wb.create_sheet("Clean Results", 0)
+    clean_headers = [
+        "License Number", "Brokerage Name", "Related Broker Name", "Office Address",
+        "City", "State", "ZIP", "County", "Office Phone", "Brokerage Website",
+        "Verification Website 1", "Verification Website 2", "Resolution Status", "Confidence"
+    ]
+    clean_ws.append(clean_headers)
+    for key in sorted(checkpoint):
+        r = checkpoint[key]
+        clean_ws.append([
+            r.license_number, r.brokerage_name, r.related_broker_name, r.office_address,
+            r.city, r.state, r.zip_code, r.county, r.office_phone, r.brokerage_website,
+            r.evidence_url, r.secondary_evidence_url, r.status, r.confidence
+        ])
+    for c in clean_ws[1]:
+        c.font = Font(bold=True, color="FFFFFF"); c.fill = fill
+        c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    clean_widths = [16,34,28,40,18,9,12,18,18,42,52,52,18,12]
+    for idx, width in enumerate(clean_widths, 1):
+        clean_ws.column_dimensions[get_column_letter(idx)].width = width
+    clean_ws.freeze_panes = "A2"
+    clean_ws.auto_filter.ref = clean_ws.dimensions
+
     output_file.parent.mkdir(parents=True, exist_ok=True)
     temp_output = output_file.with_name(output_file.stem + ".checkpoint" + output_file.suffix)
     wb.save(temp_output)

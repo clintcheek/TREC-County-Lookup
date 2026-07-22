@@ -1,25 +1,37 @@
-# Texas Broker County Resolver v7.4
+# Texas Broker County Resolver v7.5
 
-V7.4 resolves the brokerage entity and office address before using listing activity.
+V7.5 keeps the company-first address and county resolver from v7.5 and adds practical contact enrichment.
+
+## Primary output
+
+The generated workbook now starts with a **Clean Results** worksheet containing:
+
+- License number
+- Brokerage name
+- Related broker name
+- Office address, city, state and ZIP
+- County
+- Office phone, when readily available on a discovered page or search result
+- Brokerage website, when a likely official company website is available
+- Up to two verification websites
+- Resolution status and confidence
+
+The original input worksheet is preserved and receives the full audit and resolver fields.
 
 ## Search order
 
-1. Exact brokerage name + address/contact terms.
-2. Brokerage name + brokerage or individual license number.
-3. Individual broker + brokerage name.
-4. Individual + brokerage listings.
-5. Individual + company + both license numbers on listings.
+1. Exact brokerage name and office/contact terms.
+2. Brokerage name plus brokerage or individual license number.
+3. Individual broker plus brokerage name.
+4. Individual plus brokerage listings.
+5. Individual, company and license numbers on listings.
 
-A confirmed exact-company office address stops the search and becomes the primary county. Property listing addresses are excluded from office-address selection. Listing concentration is used only as the final operating-county fallback.
+A confirmed company office address stops the search. Listing addresses are used only for operating-county inference when an office cannot be confirmed.
 
-## Optional Gemini fallback
+## Website and phone handling
 
-Set `GEMINI_API_KEY` and change `enable_gemini_fallback` to `true` in `config.json`. Gemini is called only after deterministic company and person/company searches fail to produce a verified office. It uses Google Search grounding and is instructed not to treat property listings as office addresses.
+The resolver reuses pages already discovered during address resolution. It records a likely official brokerage website and a readily visible office phone without requiring a separate search stage. Directory, government, listing and social-media domains are not labeled as official brokerage websites.
 
-## Recommended validation run
+## Upgrade from v7.5
 
-- Mode: `upgrade_version`
-- Max rows: `25`
-- Checkpoint every: `5`
-
-Keep the existing `input/`, `state/`, and `output/` data when upgrading.
+Replace the program files with this package, retain your `input/` and `state/` folders, and run with `--mode upgrade_version` to revisit existing records and populate the new website and phone fields.
