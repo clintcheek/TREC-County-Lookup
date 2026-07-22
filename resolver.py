@@ -25,8 +25,8 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from rapidfuzz.fuzz import token_set_ratio
 
-RESOLVER_VERSION = "v7.6"
-USER_AGENT = "TexasBrokerCountyResolver/7.5 (private license-location research)"
+RESOLVER_VERSION = "v7.7"
+USER_AGENT = "TexasBrokerCountyResolver/7.7 (private license-location research)"
 ADDRESS_RE = re.compile(
     r"\b(\d{1,6}\s+[A-Za-z0-9.'#&\- ]{2,80}?\s(?:Street|St|Road|Rd|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Lane|Ln|Court|Ct|Parkway|Pkwy|Highway|Hwy|Loop|Way|Trail|Trl|Circle|Cir|Plaza|Place|Pl|Terrace|Ter)\.?"
     r"(?:\s*(?:Suite|Ste|Unit|#)\s*[A-Za-z0-9\-]+)?\s*,?\s*[A-Za-z.'\- ]{2,45},?\s*(?:TX|Texas|[A-Z]{2})\s+\d{5}(?:-\d{4})?)\b",
@@ -1013,7 +1013,7 @@ def parallel_queue_for(old: Result | None, related_broker: str) -> str:
 
 
 def should_process(old: Result | None, mode: str, cfg: dict[str, Any], related_broker: str = "") -> bool:
-    if mode == "parallel_5":
+    if mode in {"parallel_15", "parallel_5"}:
         return bool(parallel_queue_for(old, related_broker))
     if old is None:
         return True
@@ -1080,8 +1080,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="config.json")
     ap.add_argument("--max-rows", type=int)
-    ap.add_argument("--mode", choices=["parallel_5", "new", "recheck_review", "recheck_unresolved", "upgrade_confidence", "upgrade_version", "recheck_stale", "flagged", "recheck_all"], default="parallel_5")
-    ap.add_argument("--workers", type=int, default=None, help="Concurrent resolver workers; v7.6 defaults to 5.")
+    ap.add_argument("--mode", choices=["parallel_15", "parallel_5", "new", "recheck_review", "recheck_unresolved", "upgrade_confidence", "upgrade_version", "recheck_stale", "flagged", "recheck_all"], default="parallel_15")
+    ap.add_argument("--workers", type=int, default=None, help="Concurrent resolver workers; v7.7 defaults to 15.")
     ap.add_argument("--checkpoint-every", type=int, default=None)
     args = ap.parse_args()
 
@@ -1116,7 +1116,7 @@ def main() -> int:
         old = checkpoint.get(lic)
         if lic and name and should_process(old, args.mode, cfg, broker):
             pending.append((lic, name, broker, broker_license))
-            if args.mode == "parallel_5":
+            if args.mode in {"parallel_15", "parallel_5"}:
                 queue_counts[parallel_queue_for(old, broker)] += 1
             if len(pending) >= limit:
                 break
@@ -1125,6 +1125,8 @@ def main() -> int:
     planned = len(pending)
     completed = 0
     interrupted = False
+    run_started = time.monotonic()
+    last_progress_print = run_started
 
     def handle_stop(signum, frame):
         nonlocal interrupted
@@ -1134,14 +1136,14 @@ def main() -> int:
     signal.signal(signal.SIGTERM, handle_stop)
     signal.signal(signal.SIGINT, handle_stop)
 
-    worker_count = max(1, args.workers or int(cfg.get("workers", 5)))
+    worker_count = min(32, max(1, args.workers or int(cfg.get("workers", 15))))
     print(
         f"Checkpoint contains {len(checkpoint)} records; mode={args.mode}; processing={planned}; "
         f"workers={worker_count}; save interval={checkpoint_every}.",
         flush=True,
     )
-    if args.mode == "parallel_5":
-        print(f"v7.6 queue plan: {dict(queue_counts)}", flush=True)
+    if args.mode in {"parallel_15", "parallel_5"}:
+        print(f"v7.7 priority plan: {dict(queue_counts)}", flush=True)
 
     # Create a valid recovery workbook and metadata even when there is nothing new to process.
     if not pending:
@@ -1204,6 +1206,19 @@ def main() -> int:
                 checkpoint[result.license_number] = selected
                 append_history(history_path, previous, attempted, selected, args.mode)
                 completed += 1
+
+                now_tick = time.monotonic()
+                if completed == 1 or completed == planned or completed % 10 == 0 or now_tick - last_progress_print >= 60:
+                    elapsed = max(0.001, now_tick - run_started)
+                    rate = completed / elapsed
+                    remaining = max(0, planned - completed)
+                    eta_seconds = int(remaining / rate) if rate > 0 else 0
+                    print(
+                        f"Progress: {completed}/{planned} ({completed / planned:.1%}); "
+                        f"rate={rate:.2f} records/sec; remaining={remaining}; ETA={eta_seconds // 3600:02d}:{(eta_seconds % 3600) // 60:02d}:{eta_seconds % 60:02d}",
+                        flush=True,
+                    )
+                    last_progress_print = now_tick
 
                 if completed % checkpoint_every == 0 or completed == planned:
                     persist_all(

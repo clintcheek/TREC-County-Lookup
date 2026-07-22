@@ -1,6 +1,6 @@
-# Texas Broker County Resolver v7.5
+# Texas Broker County Resolver v7.7
 
-V7.5 keeps the company-first address and county resolver from v7.5 and adds practical contact enrichment.
+V7.5 keeps the company-first address and county resolver from v7.7 and adds practical contact enrichment.
 
 ## Primary output
 
@@ -32,10 +32,10 @@ A confirmed company office address stops the search. Listing addresses are used 
 
 The resolver reuses pages already discovered during address resolution. It records a likely official brokerage website and a readily visible office phone without requiring a separate search stage. Directory, government, listing and social-media domains are not labeled as official brokerage websites.
 
-## Upgrade from v7.5
+## Upgrade from v7.7
 
 Replace the program files with this package, retain your `input/` and `state/` folders, and run with `--mode upgrade_version` to revisit existing records and populate the new website and phone fields.
 
-## v7.6 five-worker mode
+## v7.6 fifteen-worker mode
 
-For the normal combined repair run, launch GitHub Actions with **Mode = `parallel_5`**. The resolver classifies new, related-broker-without-county, out-of-state, unresolved, and review records into non-duplicating priority queues and processes up to five records simultaneously.
+For the normal combined repair run, launch GitHub Actions with **Mode = `parallel_15`**. The resolver classifies new, related-broker-without-county, out-of-state, unresolved, and review records into non-duplicating priority queues and processes up to fifteen records simultaneously.
