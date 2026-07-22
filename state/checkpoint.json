@@ -1,10 +1,10 @@
 {
-  "last_saved_utc": "2026-07-22T22:07:31Z",
-  "completed_this_run": 500,
-  "planned_this_run": 500,
+  "last_saved_utc": "2026-07-22T23:05:38Z",
+  "completed_this_run": 100,
+  "planned_this_run": 100,
   "total_checkpointed_records": 5675,
-  "mode": "parallel_5",
-  "resolver_version": "v7.6",
+  "mode": "parallel_15",
+  "resolver_version": "v7.7",
   "status_counts": {
     "Unresolved": 2738,
     "Verified": 2117,
