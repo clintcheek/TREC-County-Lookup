@@ -566,32 +566,33 @@ def confidence_label(score: float, authoritative: bool, independent_domains: int
 
 
 def build_query_stages(lic: str, name: str, broker: str, broker_license: str = "") -> list[tuple[str, list[str]]]:
-    """Cheap deterministic entity resolution first; listing inference last."""
+    """Use the simple human-style lookup sequence requested for v7.7.1.
+
+    Stage 1: company name only.
+    Stage 2: company name plus responsible broker.
+    Stage 3: responsible broker plus real-estate role terms.
+    License-based searches remain as a final corroboration/fallback stage.
+    """
     negative_properties = "-site:zillow.com -site:redfin.com -site:trulia.com -site:loopnet.com -site:crexi.com"
     stages: list[tuple[str, list[str]]] = [
-        ("exact_company", [
-            f'"{name}" address Texas {negative_properties}',
-            f'"{name}" (office OR contact OR location) Texas {negative_properties}',
-        ]),
-        ("company_license", [
-            f'"{name}" "{lic}" Texas',
-            f'"{name}" "{broker_license}" Texas' if broker_license else f'"{name}" Texas broker license',
+        ("simple_company", [
+            f'"{name}" address phone {negative_properties}',
+            f'"{name}" contact {negative_properties}',
         ]),
     ]
     if broker:
-        stages.append(("person_company", [
-            f'"{broker}" "{name}" Texas office address',
-            f'"{broker}" "{name}" (broker OR realtor OR contact) Texas',
+        stages.append(("company_responsible_broker", [
+            f'"{name}" "{broker}" address phone',
+            f'"{name}" "{broker}" contact',
         ]))
-        stages.append(("person_company_listings", [
-            f'"{broker}" "{name}" listing Texas',
+        stages.append(("responsible_broker_role", [
+            f'"{broker}" "real estate agent" address phone Texas',
+            f'"{broker}" "real estate broker" address phone Texas',
         ]))
-        license_terms = " ".join(x for x in (lic, broker_license) if x)
-        stages.append(("person_license_listings", [
-            f'"{broker}" "{name}" {license_terms} listing Texas',
-        ]))
-    else:
-        stages.append(("company_listings", [f'"{name}" listings Texas']))
+    stages.append(("license_corroboration", [
+        f'"{name}" "{lic}" address phone Texas',
+        f'"{broker}" "{broker_license}" Texas real estate broker' if broker and broker_license else f'"{name}" Texas broker license',
+    ]))
     return stages
 
 
@@ -657,6 +658,61 @@ Prefer an official company contact page, HAR/TREC broker profile, regulatory dis
         print(f"Gemini fallback skipped: {type(exc).__name__}: {exc}", flush=True)
         return None
 
+def county_from_address_search(address: str, api_key: str, delay: float, cache: dict[str, Any], cache_path: Path, max_results: int = 5) -> tuple[str, str]:
+    """Ask the search provider which county contains an address.
+
+    Returns (county_without_suffix, evidence_url). The answer is accepted only when
+    a result explicitly ties a county to Texas. Census geocoding remains the primary
+    structured source; this is the requested plain-language confirmation/fallback.
+    """
+    if not clean(address):
+        return "", ""
+    query = f'what county is this address in "{clean(address)}"'
+    try:
+        rows = serper_search(query, api_key, delay, cache, cache_path, max_results)
+    except Exception:
+        return "", ""
+    patterns = (
+        re.compile(r"\b([A-Z][A-Za-z .'-]{1,40})\s+County\s*,?\s*Texas\b", re.I),
+        re.compile(r"\bcounty(?:\s+is|:)?\s+([A-Z][A-Za-z .'-]{1,40})(?:\s+County)?\b", re.I),
+    )
+    for row in rows:
+        hay = clean(f"{row.get('title', '')} {row.get('snippet', '')}")
+        if "texas" not in hay.lower() and ", tx" not in hay.lower():
+            continue
+        for pattern in patterns:
+            match = pattern.search(hay)
+            if match:
+                county = re.sub(r"\s+County$", "", clean(match.group(1)), flags=re.I)
+                # Avoid common false captures from generic prose.
+                if county and len(county.split()) <= 4 and county.lower() not in {"this address", "the address", "what"}:
+                    return county.title(), clean(row.get("link"))
+    return "", ""
+
+
+def geocode_and_confirm_county(address: str, api_key: str, delay: float, cache: dict[str, Any], cache_path: Path, cfg: dict[str, Any]) -> tuple[dict[str, str] | None, str, str]:
+    """Geocode an address and run the requested county question search.
+
+    Census supplies normalized address components. The plain-language county query
+    confirms the county when it agrees, and supplies a fallback when Census returns
+    an address but no county. Returns (geo, county, county_evidence_url).
+    """
+    geo = census_geocode(address, delay)
+    search_county, county_url = county_from_address_search(
+        (geo or {}).get("matched_address") or address,
+        api_key, delay, cache, cache_path,
+        int(cfg.get("county_search_results", 5)),
+    )
+    census_county = clean((geo or {}).get("county"))
+    if census_county:
+        # Keep the structured Census county if the web answer disagrees; preserve the
+        # web result only as corroborating evidence when it agrees.
+        if search_county and normalized_name(search_county) != normalized_name(census_county):
+            county_url = ""
+        return geo, census_county, county_url
+    return geo, search_county, county_url
+
+
 def resolve_one(lic: str, name: str, broker: str, broker_license: str, api_key: str, cfg: dict[str, Any], cache: dict[str, Any], cache_path: Path, audit_path: Path) -> Result:
     delay = float(cfg["request_delay_seconds"])
     stages = build_query_stages(lic, name, broker, broker_license)
@@ -718,13 +774,15 @@ def resolve_one(lic: str, name: str, broker: str, broker_license: str, api_key: 
     for stage_name, stage_queries in stages:
         for q in stage_queries:
             process_query(q)
-        if stage_name in {"exact_company", "company_license", "person_company"}:
+        if stage_name in {"simple_company", "company_responsible_broker", "responsible_broker_role", "license_corroboration"}:
             office_pool = sorted((c for c in candidates if is_confirmed_office_candidate(c)), key=lambda c: c.total_score, reverse=True)
             for c in office_pool[: int(cfg.get("max_office_geocodes_per_stage", 8))]:
                 if not c.county:
-                    geo = census_geocode(c.address, delay)
-                    if geo and geo.get("county") and geo.get("state", "TX").upper() == "TX":
-                        c.matched_address, c.city, c.state, c.zip_code, c.county = geo["matched_address"], geo["city"], geo["state"], geo["zip_code"], geo["county"]
+                    geo, confirmed_county, county_url = geocode_and_confirm_county(c.address, api_key, delay, cache, cache_path, cfg)
+                    if geo and confirmed_county and geo.get("state", "TX").upper() == "TX":
+                        c.matched_address, c.city, c.state, c.zip_code, c.county = geo["matched_address"], geo["city"], geo["state"], geo["zip_code"], confirmed_county
+                        if county_url and county_url not in discovered_websites:
+                            pass
                 if c.county:
                     audit_candidates(audit_path, candidates[:40])
                     source_urls = [x.url for x in office_pool if x.url != c.url and registrable_host(x.url) != registrable_host(c.url)]
@@ -738,12 +796,13 @@ def resolve_one(lic: str, name: str, broker: str, broker_license: str, api_key: 
                                   now_utc(), evidence_count=max(1, corroboration),
                                   brokerage_website=(c.url if is_probable_official_website(c.url) else (discovered_websites[0] if discovered_websites else "")),
                                   office_phone=(discovered_phones[0] if discovered_phones else ""))
-        if stage_name == "person_company":
+        if stage_name == "responsible_broker_role":
             ai = gemini_grounded_address(name, lic, broker, broker_license, cfg)
             if ai:
                 raw = clean(f"{ai.get('office_address')}, {ai.get('city')}, {ai.get('state') or 'TX'} {ai.get('zip_code')}")
-                geo = census_geocode(raw, delay)
-                if geo and geo.get("county"):
+                geo, confirmed_county, county_url = geocode_and_confirm_county(raw, api_key, delay, cache, cache_path, cfg)
+                if geo and confirmed_county:
+                    geo["county"] = confirmed_county
                     urls = [clean(x) for x in ai.get("source_urls", []) if clean(x)]
                     return Result(lic, name, broker, geo["matched_address"], geo["city"], geo["state"], geo["zip_code"], geo["county"],
                                   "Verified", min(0.96, float(ai.get("confidence") or 0.8)), 0.9, len({registrable_host(u) for u in urls}) or 1,
@@ -776,9 +835,9 @@ def resolve_one(lic: str, name: str, broker: str, broker_license: str, api_key: 
     ]
     geocode_limit = int(cfg.get("max_geocodes_per_record", 24))
     for c in eligible[:geocode_limit]:
-        geo = census_geocode(c.address, delay)
-        if geo and geo.get("county") and geo.get("state", "TX").upper() == "TX":
-            c.matched_address, c.city, c.state, c.zip_code, c.county = geo["matched_address"], geo["city"], geo["state"], geo["zip_code"], geo["county"]
+        geo, confirmed_county, county_url = geocode_and_confirm_county(c.address, api_key, delay, cache, cache_path, cfg)
+        if geo and confirmed_county and geo.get("state", "TX").upper() == "TX":
+            c.matched_address, c.city, c.state, c.zip_code, c.county = geo["matched_address"], geo["city"], geo["state"], geo["zip_code"], confirmed_county
 
     audit_candidates(audit_path, candidates[:40])
     geocoded = [c for c in eligible if c.county]
