@@ -1,16 +1,16 @@
 {
-  "last_saved_utc": "2026-07-23T13:55:23Z",
-  "completed_this_run": 10,
-  "planned_this_run": 10,
-  "total_checkpointed_records": 6257,
+  "last_saved_utc": "2026-07-23T16:31:26Z",
+  "completed_this_run": 5454,
+  "planned_this_run": 5454,
+  "total_checkpointed_records": 9550,
   "mode": "parallel_15",
   "resolver_version": "v7.7",
   "status_counts": {
-    "Verified": 2922,
-    "Unresolved": 2170,
-    "Needs Review": 762,
-    "Likely": 272,
-    "Very Likely": 128,
+    "Verified": 3090,
+    "Needs Review": 1026,
+    "Unresolved": 4971,
+    "Likely": 322,
+    "Very Likely": 138,
     "Resolved": 3
   }
 }
