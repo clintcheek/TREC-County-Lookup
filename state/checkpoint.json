@@ -1,7 +1,7 @@
 {
-  "last_saved_utc": "2026-07-23T00:57:50Z",
-  "completed_this_run": 4000,
-  "planned_this_run": 4000,
+  "last_saved_utc": "2026-07-23T09:36:58Z",
+  "completed_this_run": 100,
+  "planned_this_run": 100,
   "total_checkpointed_records": 6250,
   "mode": "parallel_15",
   "resolver_version": "v7.7",
