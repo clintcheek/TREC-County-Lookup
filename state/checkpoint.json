@@ -1,13 +1,13 @@
 {
-  "last_saved_utc": "2026-07-30T09:44:36Z",
+  "last_saved_utc": "2026-07-30T17:14:13Z",
   "completed_this_run": 100,
   "planned_this_run": 100,
   "total_checkpointed_records": 5457,
   "mode": "parallel_15",
   "resolver_version": "v7.7",
   "status_counts": {
-    "Likely": 126,
-    "Unresolved": 4344,
+    "Likely": 127,
+    "Unresolved": 4343,
     "Needs Review": 597,
     "Verified": 350,
     "Very Likely": 40
