@@ -1,15 +1,15 @@
 {
-  "last_saved_utc": "2026-11-06T19:25:01Z",
+  "last_saved_utc": "2026-11-07T05:58:51Z",
   "completed_this_run": 100,
   "planned_this_run": 100,
   "total_checkpointed_records": 5457,
   "mode": "parallel_15",
   "resolver_version": "v7.7",
   "status_counts": {
-    "Verified": 353,
+    "Verified": 354,
     "Unresolved": 4317,
     "Needs Review": 617,
     "Likely": 130,
-    "Very Likely": 40
+    "Very Likely": 39
   }
 }
